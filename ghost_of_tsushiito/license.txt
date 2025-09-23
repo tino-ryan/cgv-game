@@ -1,0 +1,11 @@
+Model Information:
+* title:	Ghost of Tsushiito
+* source:	https://sketchfab.com/3d-models/ghost-of-tsushiito-7ea51fcaff5b4ad08d59b306118083ec
+* author:	aaroncruz270500 (https://sketchfab.com/aaroncruz270500)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Ghost of Tsushiito" (https://sketchfab.com/3d-models/ghost-of-tsushiito-7ea51fcaff5b4ad08d59b306118083ec) by aaroncruz270500 (https://sketchfab.com/aaroncruz270500) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
