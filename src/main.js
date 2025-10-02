@@ -2,16 +2,13 @@ import * as THREE from "three";
 import { initRenderer } from "./core/renderer.js";
 import { initScene } from "./core/scene.js";
 import { initLoop } from "./core/loop.js";
-import { loadAssets } from "./core/loader.js";
+import Player from "./entities/player.js";
 
-let renderer, scene, camera, ghost;
+let renderer, scene, camera, player;
 const moveSpeed = 0.1; // Speed for ghost movement
-const cameraOffset = new THREE.Vector3(0, 1.5, 5); // Camera offset: 1.5 units up, 5 units back
 let yaw = 0; // Camera yaw (Y rotation)
 let pitch = 0; // Camera pitch (X rotation)
-let combatMode = false; // Are we in combat?
-const mouseSensitivity = 0.002; // Mouse movement sensitivity
-const keySensitivity = 0.01; // WASD rotation sensitivity
+const mouseSensitivity = 0.002;
 
 // Yaw/pitch containers to prevent tilt
 const yawObject = new THREE.Object3D();
@@ -36,13 +33,12 @@ async function init() {
   pitchObject.add(camera);
   scene.add(yawObject);
 
-  // Load model and get its bounding info
-  const { model, center, size } = await loadAssets(
-    scene,
-    "/assets/models/scene.gltf"
-  );
-  ghost = model; // Store for animation and movement
-  console.log("Ghost loaded:", ghost);
+  // Create player
+  player = new Player(scene, camera);
+
+  // Load ghost and gun assets
+  await player.loadGhost("/assets/models/scene.gltf");
+  await player.loadGun("/assets/models/gun.glb");
 
   // -----------------------------
   // Pointer Lock for Camera Look
@@ -63,14 +59,13 @@ async function init() {
 
   document.addEventListener("mousemove", (event) => {
     if (document.pointerLockElement === document.body) {
-      // Use yaw/pitch variables in both modes
       yaw -= event.movementX * mouseSensitivity;
       pitch -= event.movementY * mouseSensitivity;
       pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch)); // Clamp pitch
     }
   });
 
-  // Keyboard controls for ghost movement (arrow keys) and camera rotation (WASD)
+  // Keyboard controls
   const keys = {
     up: false,
     down: false,
@@ -81,13 +76,14 @@ async function init() {
     s: false,
     d: false,
   };
+
   window.addEventListener("keydown", (event) => {
     switch (event.key) {
       case "ArrowUp":
-        keys.down = true;
+        keys.up = true; // CHANGE BACK
         break;
       case "ArrowDown":
-        keys.up = true;
+        keys.down = true; // CHANGE BACK
         break;
       case "ArrowLeft":
         keys.left = true;
@@ -109,13 +105,14 @@ async function init() {
         break;
     }
   });
+
   window.addEventListener("keyup", (event) => {
     switch (event.key) {
       case "ArrowUp":
-        keys.down = false;
+        keys.up = false; // CHANGE BACK
         break;
       case "ArrowDown":
-        keys.up = false;
+        keys.down = false; // CHANGE BACK
         break;
       case "ArrowLeft":
         keys.left = false;
@@ -138,75 +135,38 @@ async function init() {
     }
   });
 
-  function enterCombat() {
-    combatMode = true;
-
-    // Request pointer lock for first-person
-    if (document.pointerLockElement !== document.body) {
-      document.body.requestPointerLock();
-    }
-
-    // Move yawObject to ghost position
-    yawObject.position.copy(ghost.position);
-
-    // Reset pitch and yaw to look forward
-    pitchObject.rotation.x = 0;
-    yawObject.rotation.y = 0;
-
-    // Attach camera to pitchObject at eye level
-    camera.position.set(0, 1.6, 0); // typical first-person eye height
-    pitchObject.add(camera);
-
-    // Optional: hide third-person mesh or offset it
-    // ghost.visible = false;
-
-    console.log("Entered combat mode, camera now first-person");
-  }
-
-  function exitCombat() {
-    combatMode = false;
-
-    // Detach camera from pitchObject
-    pitchObject.remove(camera);
-
-    // Restore camera position behind ghost
-    camera.position.copy(ghost.position).add(cameraOffset);
-
-    // Reattach camera to scene for third-person
-    scene.add(camera);
-
-    // Optional: show ghost body again
-    // ghost.visible = true;
-
-    console.log("Exited combat mode, camera now third-person");
-  }
-
+  // Main loop
   initLoop(renderer, scene, camera, null, (time) => {
-    // Update yaw/pitch rotations
+    if (!player.ghost) return;
+
+    // Update yaw/pitch
     yawObject.rotation.y = yaw;
     pitchObject.rotation.x = pitch;
 
     // Base forward/right directions
-    // In Three.js: -Z is forward by default, +X is right
-    let forward = new THREE.Vector3(
-      Math.sin(yaw),
-      0,
-      Math.cos(yaw)
-    ).normalize();
-    let right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
+    let forward = new THREE.Vector3();
+    let right = new THREE.Vector3();
 
-    // In combat (first person) recalc based on camera direction
-    if (combatMode) {
+    // If in combat mode → use camera direction (NEGATED for correct FPS controls)
+    if (player.combatMode) {
       yawObject.getWorldDirection(forward);
+      forward.negate(); // NEGATE to fix inverted controls
       forward.y = 0;
       forward.normalize();
-      // Fixed: flip the cross product order to invert right direction
       right.crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
+      right.negate(); // NEGATE right to fix inverted left/right
+    } else {
+      // Third-person mode - NEGATE to flip forward/back
+      forward = new THREE.Vector3(
+        -Math.sin(yaw), // ADDED NEGATIVE
+        0,
+        -Math.cos(yaw) // ADDED NEGATIVE
+      ).normalize();
+      right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
     }
 
     // Track movement vector
     let moveVector = new THREE.Vector3();
-
     if (keys.up) moveVector.add(forward);
     if (keys.down) moveVector.add(forward.clone().multiplyScalar(-1));
     if (keys.left) moveVector.add(right.clone().multiplyScalar(-1));
@@ -214,26 +174,25 @@ async function init() {
 
     if (moveVector.length() > 0) {
       moveVector.normalize();
-      ghost.position.addScaledVector(moveVector, moveSpeed);
+      player.ghost.position.addScaledVector(moveVector, moveSpeed);
 
-      // Only rotate ghost in 3rd person
-      if (!combatMode) {
-        ghost.rotation.y = Math.atan2(moveVector.z, -moveVector.x) + Math.PI;
+      // Rotate ghost only in third-person
+      if (!player.combatMode) {
+        player.ghost.rotation.y =
+          Math.atan2(moveVector.z, -moveVector.x) + Math.PI;
       }
     }
 
     // Keep yawObject at ghost's position
-    yawObject.position.copy(ghost.position);
+    yawObject.position.copy(player.ghost.position);
 
-    // Apply camera offset (only in 3rd person)
-    if (!combatMode) {
-      camera.position.copy(cameraOffset);
-    }
+    // Update player (maintains hover height)
+    player.update();
   });
 
-  // Expose combat functions globally for testing
-  window.enterCombat = enterCombat;
-  window.exitCombat = exitCombat;
+  // Expose combat toggle globally for testing
+  window.enterCombat = () => player.enterCombat();
+  window.exitCombat = () => player.exitCombat();
 }
 
 init().catch((error) => console.error("Init failed:", error));
