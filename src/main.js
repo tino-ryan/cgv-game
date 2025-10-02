@@ -182,61 +182,53 @@ async function init() {
   }
 
   initLoop(renderer, scene, camera, null, (time) => {
-    // For testing in browser console
-    window.enterCombat = enterCombat;
-    window.exitCombat = exitCombat;
-
-    // Animate ghost (sinusoidal floating)
-    ghost.position.y = size.y + Math.sin(time) * 0.3 + 0.2; // Float above floor
-    ghost.rotation.y = Math.sin(time * 0.2) * 0.5; // Gentle rotation
-
-    // Camera rotation with WASD (only affects third-person)
-    if (!combatMode) {
-      if (keys.w) pitch += keySensitivity;
-      if (keys.s) pitch -= keySensitivity;
-      if (keys.a) yaw += keySensitivity;
-      if (keys.d) yaw -= keySensitivity;
-      pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch)); // Clamp pitch
-    }
-
-    // Camera-relative movement for ghost
-    const direction = new THREE.Vector3(
-      Math.sin(yaw), // Forward direction based on yaw
-      0,
-      Math.cos(yaw)
-    ).normalize();
-    const right = new THREE.Vector3(
-      Math.sin(yaw + Math.PI / 2), // Perpendicular to direction
-      0,
-      Math.cos(yaw + Math.PI / 2)
-    ).normalize();
-
-    // Move ghost with arrow keys
-    if (keys.up) ghost.position.addScaledVector(direction, moveSpeed);
-    if (keys.down) ghost.position.addScaledVector(direction, -moveSpeed);
-    if (keys.left) ghost.position.addScaledVector(right, -moveSpeed);
-    if (keys.right) ghost.position.addScaledVector(right, moveSpeed);
-
     // Update yaw/pitch rotations
     yawObject.rotation.y = yaw;
     pitchObject.rotation.x = pitch;
 
-    // Move yawObject to follow ghost
+    // Base forward/right directions
+    // In Three.js: -Z is forward by default, +X is right
+    let forward = new THREE.Vector3(
+      Math.sin(yaw),
+      0,
+      Math.cos(yaw)
+    ).normalize();
+    let right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
+
+    // In combat (first person) recalc based on camera direction
+    if (combatMode) {
+      yawObject.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
+      right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+    }
+
+    // Track movement vector
+    let moveVector = new THREE.Vector3();
+
+    if (keys.up) moveVector.add(forward);
+    if (keys.down) moveVector.add(forward.clone().multiplyScalar(-1));
+    if (keys.left) moveVector.add(right.clone().multiplyScalar(-1));
+    if (keys.right) moveVector.add(right);
+
+    if (moveVector.length() > 0) {
+      moveVector.normalize();
+      ghost.position.addScaledVector(moveVector, moveSpeed);
+
+      // Only rotate ghost in 3rd person
+      if (!combatMode) {
+        // Fixed: swap the parameters and add PI/2 offset for proper facing
+        ghost.rotation.y = Math.atan2(moveVector.z, -moveVector.x) + Math.PI;
+      }
+    }
+
+    // Keep yawObject at ghost's position
     yawObject.position.copy(ghost.position);
 
-    // Apply camera offset (relative to pitch object) only in third-person
-    if (!combatMode) camera.position.copy(cameraOffset);
-
-    console.log(
-      "Camera position:",
-      camera.position,
-      "Ghost position:",
-      ghost.position,
-      "Pitch:",
-      pitch,
-      "Yaw:",
-      yaw
-    );
+    // Apply camera offset (only in 3rd person)
+    if (!combatMode) {
+      camera.position.copy(cameraOffset);
+    }
   });
 
   // Expose combat functions globally for testing
