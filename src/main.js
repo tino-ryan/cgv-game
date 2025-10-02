@@ -47,10 +47,10 @@ async function init() {
   window.addEventListener('keydown', (event) => {
     switch (event.key) {
       case 'ArrowUp':
-        keys.up = true;
+        keys.down = true;
         break;
       case 'ArrowDown':
-        keys.down = true;
+        keys.up = true;
         break;
       case 'ArrowLeft':
         keys.left = true;
@@ -75,10 +75,10 @@ async function init() {
   window.addEventListener('keyup', (event) => {
     switch (event.key) {
       case 'ArrowUp':
-        keys.up = false;
+        keys.down = false;
         break;
       case 'ArrowDown':
-        keys.down = false;
+        keys.up = false;
         break;
       case 'ArrowLeft':
         keys.left = false;
