@@ -200,7 +200,8 @@ async function init() {
       yawObject.getWorldDirection(forward);
       forward.y = 0;
       forward.normalize();
-      right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+      // Fixed: flip the cross product order to invert right direction
+      right.crossVectors(new THREE.Vector3(0, 1, 0), forward).normalize();
     }
 
     // Track movement vector
@@ -217,7 +218,6 @@ async function init() {
 
       // Only rotate ghost in 3rd person
       if (!combatMode) {
-        // Fixed: swap the parameters and add PI/2 offset for proper facing
         ghost.rotation.y = Math.atan2(moveVector.z, -moveVector.x) + Math.PI;
       }
     }
