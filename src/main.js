@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { playerHealth } from "./core/state.js";
+import { updateHeartsUI } from "./ui/healthUI.js";
+import { showGameOver, initMenu } from "./ui/menu.js";
+import { initHUD } from "./ui/hud.js";
 import { initRenderer } from './core/renderer.js';
 import { initScene } from './core/scene.js';
 import { initLoop } from './core/loop.js';
@@ -21,10 +25,24 @@ async function init() {
   console.log('Scene initialized:', scene);
   console.log('Camera initialized:', camera);
 
+  initHUD();
+  initMenu();
+  updateHeartsUI();
+
+  
+
   // Load model and get its bounding info
   const { model, center, size } = await loadAssets(scene, '/assets/models/scene.gltf');
   ghost = model; // Store for animation and movement
   console.log('Ghost loaded:', ghost);
+
+   window.addEventListener("keydown", (e) => {
+    if (e.key === "h") {
+      playerHealth.takeDamage(1);
+      updateHeartsUI();
+      if (playerHealth.isDead()) showGameOver();
+    }
+  });
 
   // Mouse movement for camera rotation
   let isMouseDown = false;
@@ -147,6 +165,7 @@ async function init() {
   });
 }
 
+ 
 init().catch(error => console.error('Init failed:', error));
 
 window.addEventListener('resize', () => {
