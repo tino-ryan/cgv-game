@@ -21,6 +21,17 @@ export default class Player {
     if (this.crosshair) {
       this.crosshair.style.display = "none"; // hidden by default
     }
+
+    // Raycaster for shooting
+    this.raycaster = new THREE.Raycaster();
+
+    //shooting cooldown to prevent spamming
+    this.canShoot = true;
+    this.shootCooldown = 0.3; // seconds
+
+    // Tracer parameters
+    this.tracerDuration = 0.1; // seconds
+    this.tracerMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
   }
 
   async loadGhost(url) {
@@ -98,6 +109,14 @@ export default class Player {
 
     // Set camera to first-person position
     this.camera.position.set(0, 1.6, 0);
+
+    // Listen for shooting
+    window.addEventListener("mousedown", (event) => {
+      if (this.combatMode && event.button === 0) {
+        // left click
+        this.shoot();
+      }
+    });
   }
 
   exitCombat() {
@@ -121,5 +140,57 @@ export default class Player {
     if (this.ghost) {
       this.ghost.position.y = this.hoverHeight;
     }
+  }
+
+  shoot() {
+    if (!this.canShoot) return;
+
+    this.canShoot = false;
+    setTimeout(() => (this.canShoot = true), this.shootCooldown * 1000);
+
+    // Position the ray slightly offset from the gun
+    const gunPosition = new THREE.Vector3();
+    this.gun.getWorldPosition(gunPosition);
+
+    // Camera forward direction
+    const direction = new THREE.Vector3();
+    this.camera.getWorldDirection(direction);
+
+    // Offset a bit to the right
+    const right = new THREE.Vector3();
+    this.camera.getWorldDirection(direction);
+    right.cross(this.camera.up).multiplyScalar(0.2);
+    gunPosition.add(right);
+
+    // Cast the ray
+    this.raycaster.set(gunPosition, direction);
+
+    const enemies = this.scene.children.filter((obj) => obj.userData.isEnemy);
+    const intersects = this.raycaster.intersectObjects(enemies, true);
+
+    // Determine tracer end point
+    let tracerEnd = new THREE.Vector3();
+    if (intersects.length > 0) {
+      tracerEnd.copy(intersects[0].point);
+      console.log("Hit enemy:", intersects[0].object);
+      // call intersects[0].object.takeDamage() or similar
+    } else {
+      tracerEnd.copy(gunPosition).add(direction.multiplyScalar(50)); // 50 units forward
+      console.log("Missed!");
+    }
+
+    // Create tracer line
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      gunPosition.clone(),
+      tracerEnd,
+    ]);
+    const line = new THREE.Line(geometry, this.tracerMaterial);
+    this.scene.add(line);
+
+    // Remove tracer after duration
+    setTimeout(() => {
+      this.scene.remove(line);
+      geometry.dispose();
+    }, this.tracerDuration * 1000);
   }
 }
