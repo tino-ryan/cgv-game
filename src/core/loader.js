@@ -1,3 +1,4 @@
+//src/core/loader.js
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Box3, Vector3 } from 'three';
 

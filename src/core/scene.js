@@ -1,3 +1,4 @@
+//src/core/scene.js
 import * as THREE from 'three';
 
 export function initScene() {

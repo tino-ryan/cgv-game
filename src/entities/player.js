@@ -1,6 +1,7 @@
+//src/entities/player.js
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { loadAssets } from "../core/loader.js"; // adjust path if needed
+import { loadAssets } from "../core/loader.js";
 
 export default class Player {
   constructor(scene, camera) {
@@ -9,29 +10,30 @@ export default class Player {
 
     this.ghost = null;
     this.gun = null;
+    this.tutorial = null; // Reference to tutorial
 
     this.combatMode = false;
     this.gunEquipped = false;
 
     this.cameraOffset = new THREE.Vector3(0, 1.5, 5);
-    this.hoverHeight = 1.5; // How high ghost hovers above ground
+    this.hoverHeight = 1.5;
 
-    // Grab crosshair div from the DOM
     this.crosshair = document.getElementById("crosshair");
     if (this.crosshair) {
-      this.crosshair.style.display = "none"; // hidden by default
+      this.crosshair.style.display = "none";
     }
 
-    // Raycaster for shooting
     this.raycaster = new THREE.Raycaster();
 
-    //shooting cooldown to prevent spamming
     this.canShoot = true;
-    this.shootCooldown = 0.3; // seconds
+    this.shootCooldown = 0.3;
 
-    // Tracer parameters
-    this.tracerDuration = 0.1; // seconds
+    this.tracerDuration = 0.1;
     this.tracerMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+  }
+
+  setTutorial(tutorial) {
+    this.tutorial = tutorial;
   }
 
   async loadGhost(url) {
@@ -40,10 +42,7 @@ export default class Player {
       const loader = new GLTFLoader();
       const gltf = await loader.loadAsync(url);
       this.ghost = gltf.scene;
-
-      // Set initial hover position
       this.ghost.position.y = this.hoverHeight;
-
       this.scene.add(this.ghost);
       console.log("Ghost loaded successfully");
     } catch (error) {
@@ -55,12 +54,10 @@ export default class Player {
     try {
       const { model } = await loadAssets(this.scene, url);
       this.gun = model;
-
-      // Don't attach to camera yet
-      this.gun.visible = false; // hide until combat
-      this.scene.add(this.gun); // temporarily add to scene so it's loaded
-      this.gun.scale.set(0.003, 0.003, 0.003); // adjust scale to reasonable "gun in hand" size
-      this.gun.position.set(0, 0, 0); // reset local position
+      this.gun.visible = false;
+      this.scene.add(this.gun);
+      this.gun.scale.set(0.003, 0.003, 0.003);
+      this.gun.position.set(0, 0, 0);
       this.gun.rotation.set(-Math.PI / 1, 0, 3);
     } catch (err) {
       console.error("Failed to load gun model:", err);
@@ -72,7 +69,6 @@ export default class Player {
     console.log("Creating fallback gun geometry");
     const group = new THREE.Group();
 
-    // Simple gun shape
     const handleGeometry = new THREE.BoxGeometry(0.05, 0.2, 0.05);
     const barrelGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.3, 8);
     const material = new THREE.MeshStandardMaterial({ color: 0x333333 });
@@ -96,98 +92,107 @@ export default class Player {
   enterCombat() {
     this.combatMode = true;
 
-    // Show crosshair
     if (this.crosshair) {
       this.crosshair.style.display = "block";
     }
-    // Attach gun to camera for first-person
+    
     if (this.gun) {
       this.camera.add(this.gun);
-      this.gun.position.set(0.5, -0.5, -1); // gun in hand
+      this.gun.position.set(0.5, -0.5, -1);
       this.gun.visible = true;
     }
 
-    // Set camera to first-person position
     this.camera.position.set(0, 1.6, 0);
 
-    // Listen for shooting
-    window.addEventListener("mousedown", (event) => {
+    // Remove any existing listener first
+    if (this.shootHandler) {
+      window.removeEventListener("mousedown", this.shootHandler);
+    }
+    
+    this.shootHandler = (event) => {
       if (this.combatMode && event.button === 0) {
-        // left click
         this.shoot();
       }
-    });
+    };
+    
+    window.addEventListener("mousedown", this.shootHandler);
   }
 
   exitCombat() {
     this.combatMode = false;
-    // Hide crosshair
+    
     if (this.crosshair) {
       this.crosshair.style.display = "none";
     }
+    
     if (this.gun) {
       this.camera.remove(this.gun);
       this.gun.visible = false;
-      this.scene.add(this.gun); // optional: keep in scene or remove completely
+      this.scene.add(this.gun);
     }
 
-    // Reset camera to third-person offset
+    if (this.shootHandler) {
+      window.removeEventListener("mousedown", this.shootHandler);
+    }
+
     this.camera.position.copy(this.cameraOffset);
   }
 
   update() {
-    // Maintain hover height
     if (this.ghost) {
       this.ghost.position.y = this.hoverHeight;
     }
   }
 
   shoot() {
-    if (!this.canShoot) return;
-
+    if (!this.canShoot || !this.gun) return;
     this.canShoot = false;
     setTimeout(() => (this.canShoot = true), this.shootCooldown * 1000);
 
-    // Position the ray slightly offset from the gun
     const gunPosition = new THREE.Vector3();
     this.gun.getWorldPosition(gunPosition);
 
-    // Camera forward direction
     const direction = new THREE.Vector3();
     this.camera.getWorldDirection(direction);
 
-    // Offset a bit to the right
-    const right = new THREE.Vector3();
-    this.camera.getWorldDirection(direction);
-    right.cross(this.camera.up).multiplyScalar(0.2);
-    gunPosition.add(right);
-
-    // Cast the ray
     this.raycaster.set(gunPosition, direction);
 
-    const enemies = this.scene.children.filter((obj) => obj.userData.isEnemy);
+    const enemies = this.scene.children.filter(obj => obj.userData.isEnemy);
     const intersects = this.raycaster.intersectObjects(enemies, true);
 
-    // Determine tracer end point
     let tracerEnd = new THREE.Vector3();
     if (intersects.length > 0) {
-      tracerEnd.copy(intersects[0].point);
-      console.log("Hit enemy:", intersects[0].object);
-      // call intersects[0].object.takeDamage() or similar
+      const hit = intersects[0].object;
+      const hitPosition = hit.position.clone();
+      tracerEnd.copy(hitPosition);
+
+      // Remove from scene
+      this.scene.remove(hit);
+      if (hit.geometry) hit.geometry.dispose();
+      if (hit.material) hit.material.dispose();
+
+      // Remove from tutorial list
+      if (this.tutorial) {
+        const idx = this.tutorial.disguisedObjects.indexOf(hit);
+        if (idx !== -1) {
+          this.tutorial.disguisedObjects.splice(idx, 1);
+        }
+
+        // Emit spirit particles at hit position
+        this.tutorial.releaseSpirit(hitPosition);
+      }
     } else {
-      tracerEnd.copy(gunPosition).add(direction.multiplyScalar(50)); // 50 units forward
-      console.log("Missed!");
+      tracerEnd.copy(gunPosition).add(direction.clone().multiplyScalar(50));
     }
 
-    // Create tracer line
+    // Draw tracer line
     const geometry = new THREE.BufferGeometry().setFromPoints([
       gunPosition.clone(),
-      tracerEnd,
+      tracerEnd
     ]);
     const line = new THREE.Line(geometry, this.tracerMaterial);
     this.scene.add(line);
-
-    // Remove tracer after duration
+    
     setTimeout(() => {
       this.scene.remove(line);
       geometry.dispose();

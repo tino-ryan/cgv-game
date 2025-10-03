@@ -1,0 +1,47 @@
+project-root/
+│
+├── public/
+│   └── assets/
+│       ├── models/
+│       │   ├── textures/
+│       │   │   └── pics
+│       │   ├── gun.glb
+│       │   ├── scene.bin
+│       │   └── scene.gltf
+│       └── textures/
+│           └── grass.jpg
+│
+├── styles/
+│   └── global.css
+│
+├── src/
+│   ├── core/
+│   │   ├── loader.js
+│   │   ├── loop.js
+│   │   ├── renderer.js
+│   │   └── scene.js
+│   │
+│   ├── entities/
+│   │   ├── bellboyboss.js
+│   │   ├── npc.js
+│   │   └── player.js
+│   │
+│   ├── scene/
+│   │   ├── lobbyscene.js
+│   │   ├── level2scene.js
+│   │   └── level3scene.js
+│   │
+│   ├── systems/
+│   │   ├── audio.js
+│   │   └── physics.js
+│   │
+│   ├── ui/
+│   │   ├── hud.js
+│   │   └── menu.js
+│   │
+│   └── main.js
+│
+├── index.html
+├── vite.config.js
+├── package.json
+└── .gitignore
