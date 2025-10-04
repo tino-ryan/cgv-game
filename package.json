@@ -1,7 +1,7 @@
 {
   "name": "cgv-game",
   "version": "1.0.0",
-  "description": "",
+  "description": "A simple Three.js + Vite starter project for computer graphics and visualization (CGV) experiments.",
   "main": "index.js",
   "keywords": [],
   "author": "",
@@ -12,10 +12,18 @@
     "vite": "^7.1.7"
   },
   "scripts": {
-  "test": "echo \"Error: no test specified\" && exit 1",
-  "dev": "vite",
-  "build": "vite build",
-  "preview": "vite preview"
-}
-
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tino-ryan/cgv-game.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tino-ryan/cgv-game/issues"
+  },
+  "homepage": "https://github.com/tino-ryan/cgv-game#readme"
 }
