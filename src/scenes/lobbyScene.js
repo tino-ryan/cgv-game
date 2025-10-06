@@ -1,4 +1,3 @@
-// src/scene/lobbyscene.js
 import * as THREE from "three";
 import Player from "../entities/player.js";
 import Tutorial from "../systems/tutorial.js";
@@ -62,7 +61,7 @@ export default class LobbyScene {
     this.gameOver = false;
   }
 
-  async loadLobbyEnvironment(){
+  async loadLobbyEnvironment() {
     const loader = new GLTFLoader();
 
     try {
@@ -76,7 +75,9 @@ export default class LobbyScene {
 
       // Register all meshes in the lobby model as collision objects
       this.physics.addCollisionObject(this.lobbyModel, true);
-      console.log(`Registered ${this.physics.collisionObjects.length} collision objects from lobby model`);
+      console.log(
+        `Registered ${this.physics.collisionObjects.length} collision objects from lobby model`
+      );
     } catch (err) {
       console.error("Failed to load lobby environment:", err);
     }
@@ -89,7 +90,12 @@ export default class LobbyScene {
     this.player.enterCombat();
 
     // Spawn the boss with physics reference
-    this.boss = new BellboyBoss(this.scene, this.player, this.hud, this.physics);
+    this.boss = new BellboyBoss(
+      this.scene,
+      this.player,
+      this.hud,
+      this.physics
+    );
 
     // Store boss reference in scene for player to access
     this.scene.userData.boss = this.boss;
@@ -397,7 +403,8 @@ export default class LobbyScene {
     if (this.serviceBell) {
       // Floating animation
       this.serviceBell.userData.floatOffset += delta * 2;
-      this.serviceBell.position.y = 1.0 + Math.sin(this.serviceBell.userData.floatOffset) * 0.2;
+      this.serviceBell.position.y =
+        1.0 + Math.sin(this.serviceBell.userData.floatOffset) * 0.2;
       this.serviceBell.rotation.y += delta;
 
       // Check if player is nearby
@@ -441,13 +448,13 @@ export default class LobbyScene {
       // Create a cutscene manager instance
       const cutsceneContainer = document.getElementById("cutscene-container");
       if (!cutsceneContainer) {
-        console.error("Cutscene container not found — was it created in main.js?");
+        console.error(
+          "Cutscene container not found — was it created in main.js?"
+        );
         // Fallback to old behavior
         this.dropServiceBell(this.boss.mesh.position);
         setTimeout(() => {
-          this.hud.showMessage(
-            "A mysterious bell has appeared... Pick it up!"
-          );
+          this.hud.showMessage("A mysterious bell has appeared... Pick it up!");
         }, 1000);
         return;
       }
@@ -481,7 +488,9 @@ export default class LobbyScene {
 
     try {
       console.log("Loading service bell...");
-      const gltf = await loader.loadAsync("/assets/models/worn_service_ring_bell.glb");
+      const gltf = await loader.loadAsync(
+        "/assets/models/worn_service_ring_bell.glb"
+      );
 
       this.serviceBell = gltf.scene;
       this.serviceBell.position.copy(position);
@@ -507,11 +516,11 @@ export default class LobbyScene {
   createFallbackBell(position) {
     const geometry = new THREE.CylinderGeometry(0.3, 0.4, 0.5, 16);
     const material = new THREE.MeshStandardMaterial({
-      color: 0xFFD700,
+      color: 0xffd700,
       metalness: 0.8,
       roughness: 0.2,
-      emissive: 0xFFD700,
-      emissiveIntensity: 0.3
+      emissive: 0xffd700,
+      emissiveIntensity: 0.3,
     });
 
     this.serviceBell = new THREE.Mesh(geometry, material);
@@ -528,7 +537,9 @@ export default class LobbyScene {
   checkBellPickup() {
     if (!this.serviceBell || !this.player.ghost) return;
 
-    const distance = this.player.ghost.position.distanceTo(this.serviceBell.position);
+    const distance = this.player.ghost.position.distanceTo(
+      this.serviceBell.position
+    );
 
     if (distance < 2.0) {
       // Show pickup prompt
@@ -587,14 +598,16 @@ export default class LobbyScene {
       description: "A worn service bell that summons... something.",
       icon: iconUrl,
       iconEmoji: "🔔", // Fallback emoji
-      onUse: () => this.useServiceBell()
+      onUse: () => this.useServiceBell(),
     };
 
     this.inventory.addItem(bellItem);
     this.hidePickupPrompt();
     this.serviceBell = null;
 
-    this.hud.showMessage("Obtained Service Bell! Select it in your inventory and press E to use.");
+    this.hud.showMessage(
+      "Obtained Service Bell! Select it in your inventory and press E to use."
+    );
   }
 
   generateBellIcon() {
@@ -603,7 +616,7 @@ export default class LobbyScene {
     const iconRenderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
-      preserveDrawingBuffer: true
+      preserveDrawingBuffer: true,
     });
     iconRenderer.setSize(iconSize, iconSize);
     iconRenderer.setClearColor(0x000000, 0);
@@ -640,7 +653,7 @@ export default class LobbyScene {
     iconRenderer.render(iconScene, iconCamera);
 
     // Get data URL
-    const iconDataUrl = iconRenderer.domElement.toDataURL('image/png');
+    const iconDataUrl = iconRenderer.domElement.toDataURL("image/png");
 
     // Cleanup
     iconRenderer.dispose();
@@ -651,7 +664,9 @@ export default class LobbyScene {
   async useServiceBell() {
     console.log("🔔 Using service bell...");
 
-    this.hud.showMessage("🔔 *Ring ring* The bell chimes throughout the hotel...");
+    this.hud.showMessage(
+      "🔔 *Ring ring* The bell chimes throughout the hotel..."
+    );
 
     // Wait a moment
     await this.sleep(2000);
@@ -666,7 +681,7 @@ export default class LobbyScene {
   }
 
   sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   snapCameraToBoss() {
@@ -691,7 +706,11 @@ export default class LobbyScene {
     this.cameraSnapTarget = { yaw, pitch };
     this.cameraSnapActive = true;
 
-    console.log(`Snapping camera to boss - Yaw: ${yaw.toFixed(2)}, Pitch: ${pitch.toFixed(2)}`);
+    console.log(
+      `Snapping camera to boss - Yaw: ${yaw.toFixed(2)}, Pitch: ${pitch.toFixed(
+        2
+      )}`
+    );
   }
 
   getCameraSnapRotation() {
