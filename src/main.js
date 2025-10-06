@@ -14,7 +14,7 @@ const pitchObject = new THREE.Object3D();
 async function init() {
   // Initialize renderer
   renderer = initRenderer();
-  
+
   // Initialize camera
   camera = new THREE.PerspectiveCamera(
     75,
@@ -52,7 +52,10 @@ async function init() {
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && document.pointerLockElement === document.body) {
+    if (
+      event.key === "Escape" &&
+      document.pointerLockElement === document.body
+    ) {
       document.exitPointerLock();
     }
   });
@@ -198,9 +201,11 @@ async function init() {
     yawObject.position.copy(lobbyScene.player.ghost.position);
 
     // Update lobby scene (tutorial, boss, etc.) - pass current yaw and pitch
-    lobbyScene.camera.rotation.y = yaw;
-    lobbyScene.camera.rotation.x = pitch;
-    lobbyScene.update();
+    //lobbyScene.camera.rotation.y = yaw;
+    //lobbyScene.camera.rotation.x = pitch;
+    //lobbyScene.update();
+    // FIXED: Pass the actual yaw and pitch values to the scene
+    lobbyScene.updateWithCameraRotation(yaw, pitch);
   }
 
   animate();
