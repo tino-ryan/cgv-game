@@ -4,6 +4,12 @@ import Player from "../entities/player.js";
 import Tutorial from "../systems/tutorial.js";
 import BellboyBoss from "../entities/bellboyBoss.js";
 import HUD from "../ui/hud.js";
+import PhysicsSystem from "../systems/physics.js";
+import Inventory from "../systems/inventory.js";
+import RoomTransformation from "../systems/roomTransformation.js";
+import CutsceneManager from "../systems/cutsceneManager.js";
+import { postLobbyCutscene } from "../cutscenes/postLobbyCutscene.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export default class LobbyScene {
   constructor(renderer, camera) {
@@ -13,21 +19,17 @@ export default class LobbyScene {
     this.scene = new THREE.Scene();
     this.clock = new THREE.Clock();
 
-    // Add floor
-    const floorGeometry = new THREE.PlaneGeometry(50, 50);
-    const grassTexture = new THREE.TextureLoader().load(
-      "/assets/textures/grass.jpg"
-    );
-    grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
-    grassTexture.repeat.set(10, 10);
-    const floorMaterial = new THREE.MeshStandardMaterial({
-      map: grassTexture,
-      side: THREE.DoubleSide,
-    });
-    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = 0;
-    this.scene.add(floor);
+    // Initialize physics system
+    this.physics = new PhysicsSystem(this.scene);
+
+    // Initialize inventory system
+    this.inventory = new Inventory(null);
+
+    // Initialize room transformation system
+    this.roomTransformer = new RoomTransformation(this.scene, this.physics);
+
+    this.lobbyModel = null;
+    this.loadLobbyEnvironment();
 
     // Lights
     const ambient = new THREE.AmbientLight(0xffffff, 0.6);
@@ -35,18 +37,18 @@ export default class LobbyScene {
     dirLight.position.set(5, 10, 5);
     this.scene.add(ambient, dirLight);
 
-    // ✅ Use HUD class
+    // Use HUD class
     this.hud = new HUD();
 
-    // ✅ Player (with HUD support)
+    // Player (with HUD support)
     this.player = new Player(this.scene, this.camera, this.hud);
     this.player.loadGhost("/public/assets/models/scene.gltf");
     this.player.loadGun("/public/assets/models/gun.glb");
 
-    // ✅ Set global reference so player can call handlePlayerDefeat
+    // Set global reference so player can call handlePlayerDefeat
     window.lobbyScene = this;
 
-    // ✅ Tutorial (with HUD + Player)
+    // Tutorial (with HUD + Player)
     // Pass the scene reference so tutorial can call startBossFight
     this.tutorial = new Tutorial(this.hud, this, this.player);
     this.player.setTutorial(this.tutorial);
@@ -60,26 +62,49 @@ export default class LobbyScene {
     this.gameOver = false;
   }
 
+  async loadLobbyEnvironment(){
+    const loader = new GLTFLoader();
+
+    try {
+      const gltf = await loader.loadAsync("/assets/models/lobby.glb");
+
+      this.lobbyModel = gltf.scene;
+      this.lobbyModel.position.set(0, 0, 0);
+      this.lobbyModel.scale.set(2.5, 2.5, 2.5);
+
+      this.scene.add(this.lobbyModel);
+
+      // Register all meshes in the lobby model as collision objects
+      this.physics.addCollisionObject(this.lobbyModel, true);
+      console.log(`Registered ${this.physics.collisionObjects.length} collision objects from lobby model`);
+    } catch (err) {
+      console.error("Failed to load lobby environment:", err);
+    }
+  }
+
   startBossFight() {
     console.log("⚔️ Boss fight starting...");
 
     // Keep player in combat mode
     this.player.enterCombat();
 
-    // Spawn the boss
-    this.boss = new BellboyBoss(this.scene, this.player, this.hud);
+    // Spawn the boss with physics reference
+    this.boss = new BellboyBoss(this.scene, this.player, this.hud, this.physics);
 
     // Store boss reference in scene for player to access
     this.scene.userData.boss = this.boss;
     this.scene.userData.lobbyScene = this;
 
-    // ✅ Create ONLY boss health bar (removed player health bar)
+    // Snap camera to look at boss
+    this.snapCameraToBoss();
+
+    // Create ONLY boss health bar (removed player health bar)
     this.bossHealthFill = this.hud.createHealthBar("Bellboy Ghost", 50, "red");
 
     console.log("Boss health bar created:", this.bossHealthFill);
 
     // Show boss introduction message
-    this.hud.showMessage("⚠️ The Bellboy Ghost has appeared! Defeat him!");
+    this.hud.showMessage("The Bellboy Ghost has appeared! Defeat him!");
     setTimeout(() => {
       this.hud.showMessage("");
     }, 3000);
@@ -94,7 +119,7 @@ export default class LobbyScene {
       if (this.boss.isChasing && !this.boss.chaseMessageShown) {
         this.boss.chaseMessageShown = true;
         this.hud.showMessage(
-          "⚠️ The boss is now chasing you! Keep your distance!"
+          "The boss is now chasing you! Keep your distance!"
         );
         setTimeout(() => {
           this.hud.showMessage("");
@@ -368,6 +393,17 @@ export default class LobbyScene {
       this.handleBossDefeat();
     }
 
+    // Animate and check for service bell pickup
+    if (this.serviceBell) {
+      // Floating animation
+      this.serviceBell.userData.floatOffset += delta * 2;
+      this.serviceBell.position.y = 1.0 + Math.sin(this.serviceBell.userData.floatOffset) * 0.2;
+      this.serviceBell.rotation.y += delta;
+
+      // Check if player is nearby
+      this.checkBellPickup();
+    }
+
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -376,7 +412,7 @@ export default class LobbyScene {
     this.updateWithCameraRotation(0, 0);
   }
 
-  handleBossDefeat() {
+  async handleBossDefeat() {
     if (this.boss.defeatedHandled) return;
     this.boss.defeatedHandled = true;
 
@@ -395,10 +431,274 @@ export default class LobbyScene {
       this.bossHealthFill = null;
     }
 
+    // Wait a short delay before the cutscene starts
+    setTimeout(async () => {
+      this.hud.showMessage("");
+
+      // Pause gameplay visuals
+      if (this.renderer) this.renderer.setAnimationLoop(null);
+
+      // Create a cutscene manager instance
+      const cutsceneContainer = document.getElementById("cutscene-container");
+      if (!cutsceneContainer) {
+        console.error("Cutscene container not found — was it created in main.js?");
+        // Fallback to old behavior
+        this.dropServiceBell(this.boss.mesh.position);
+        setTimeout(() => {
+          this.hud.showMessage(
+            "A mysterious bell has appeared... Pick it up!"
+          );
+        }, 1000);
+        return;
+      }
+
+      const cutsceneManager = new CutsceneManager("cutscene-container");
+
+      console.log("🎬 Starting post-lobby cutscene...");
+      await cutsceneManager.play(postLobbyCutscene);
+
+      console.log("✅ Post-lobby cutscene complete.");
+
+      // Drop the service bell at boss location after cutscene
+      this.dropServiceBell(this.boss.mesh.position);
+
+      // Show pickup message
+      this.hud.showMessage("A mysterious bell has appeared... Pick it up!");
+
+      // Resume gameplay
+      if (this.renderer) {
+        const animate = () => {
+          requestAnimationFrame(animate);
+          // This will be overridden by main.js's animate loop
+        };
+        this.renderer.setAnimationLoop(animate);
+      }
+    }, 2000);
+  }
+
+  async dropServiceBell(position) {
+    const loader = new GLTFLoader();
+
+    try {
+      console.log("Loading service bell...");
+      const gltf = await loader.loadAsync("/assets/models/worn_service_ring_bell.glb");
+
+      this.serviceBell = gltf.scene;
+      this.serviceBell.position.copy(position);
+      this.serviceBell.position.y = 1.0; // Float at pickup height
+      this.serviceBell.scale.set(5, 5, 5);
+      this.serviceBell.userData.isPickup = true;
+      this.serviceBell.userData.itemName = "Service Bell";
+
+      this.scene.add(this.serviceBell);
+
+      // Add floating animation
+      this.serviceBell.userData.floatOffset = 0;
+
+      console.log("Service bell dropped at", position);
+    } catch (err) {
+      console.error("Failed to load service bell model:", err);
+
+      // Fallback: Create simple bell geometry
+      this.createFallbackBell(position);
+    }
+  }
+
+  createFallbackBell(position) {
+    const geometry = new THREE.CylinderGeometry(0.3, 0.4, 0.5, 16);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xFFD700,
+      metalness: 0.8,
+      roughness: 0.2,
+      emissive: 0xFFD700,
+      emissiveIntensity: 0.3
+    });
+
+    this.serviceBell = new THREE.Mesh(geometry, material);
+    this.serviceBell.position.copy(position);
+    this.serviceBell.position.y = 1.0;
+    this.serviceBell.userData.isPickup = true;
+    this.serviceBell.userData.itemName = "Service Bell";
+    this.serviceBell.userData.floatOffset = 0;
+
+    this.scene.add(this.serviceBell);
+    console.log("Created fallback bell");
+  }
+
+  checkBellPickup() {
+    if (!this.serviceBell || !this.player.ghost) return;
+
+    const distance = this.player.ghost.position.distanceTo(this.serviceBell.position);
+
+    if (distance < 2.0) {
+      // Show pickup prompt
+      if (!this.pickupPromptShown) {
+        this.showPickupPrompt();
+        this.pickupPromptShown = true;
+      }
+    } else {
+      this.hidePickupPrompt();
+      this.pickupPromptShown = false;
+    }
+  }
+
+  showPickupPrompt() {
+    if (document.getElementById("pickup-prompt")) return;
+
+    const prompt = document.createElement("div");
+    prompt.id = "pickup-prompt";
+    prompt.style.position = "fixed";
+    prompt.style.top = "50%";
+    prompt.style.left = "50%";
+    prompt.style.transform = "translate(-50%, -50%)";
+    prompt.style.background = "rgba(0, 0, 0, 0.8)";
+    prompt.style.color = "gold";
+    prompt.style.padding = "15px 30px";
+    prompt.style.borderRadius = "10px";
+    prompt.style.fontSize = "20px";
+    prompt.style.fontWeight = "bold";
+    prompt.style.border = "2px solid gold";
+    prompt.style.zIndex = "10000";
+    prompt.textContent = "Press F to pick up Service Bell";
+    document.body.appendChild(prompt);
+  }
+
+  hidePickupPrompt() {
+    const prompt = document.getElementById("pickup-prompt");
+    if (prompt) {
+      prompt.remove();
+    }
+  }
+
+  pickupBell() {
+    if (!this.serviceBell) return;
+
+    console.log("Picking up service bell...");
+
+    // Generate icon from 3D model
+    const iconUrl = this.generateBellIcon();
+
+    // Remove bell from scene
+    this.scene.remove(this.serviceBell);
+
+    // Add to inventory
+    const bellItem = {
+      name: "Bell",
+      description: "A worn service bell that summons... something.",
+      icon: iconUrl,
+      iconEmoji: "🔔", // Fallback emoji
+      onUse: () => this.useServiceBell()
+    };
+
+    this.inventory.addItem(bellItem);
+    this.hidePickupPrompt();
+    this.serviceBell = null;
+
+    this.hud.showMessage("Obtained Service Bell! Select it in your inventory and press E to use.");
+  }
+
+  generateBellIcon() {
+    // Create a small offscreen renderer for the icon
+    const iconSize = 128;
+    const iconRenderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      preserveDrawingBuffer: true
+    });
+    iconRenderer.setSize(iconSize, iconSize);
+    iconRenderer.setClearColor(0x000000, 0);
+
+    // Create camera for icon
+    const iconCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    iconCamera.position.set(2, 2, 2);
+    iconCamera.lookAt(0, 0, 0);
+
+    // Create temporary scene with bell
+    const iconScene = new THREE.Scene();
+
+    // Add lighting
+    const light1 = new THREE.DirectionalLight(0xffffff, 1);
+    light1.position.set(1, 1, 1);
+    iconScene.add(light1);
+    const light2 = new THREE.AmbientLight(0xffffff, 0.5);
+    iconScene.add(light2);
+
+    // Clone the bell model
+    const bellClone = this.serviceBell.clone();
+    bellClone.position.set(0, 0, 0);
+
+    // Scale to fit icon
+    const box = new THREE.Box3().setFromObject(bellClone);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 1.5 / maxDim;
+    bellClone.scale.multiplyScalar(scale);
+
+    iconScene.add(bellClone);
+
+    // Render to canvas
+    iconRenderer.render(iconScene, iconCamera);
+
+    // Get data URL
+    const iconDataUrl = iconRenderer.domElement.toDataURL('image/png');
+
+    // Cleanup
+    iconRenderer.dispose();
+
+    return iconDataUrl;
+  }
+
+  async useServiceBell() {
+    console.log("🔔 Using service bell...");
+
+    this.hud.showMessage("🔔 *Ring ring* The bell chimes throughout the hotel...");
+
+    // Wait a moment
+    await this.sleep(2000);
+
+    // Transform the room
+    await this.roomTransformer.transformRoom(this.lobbyModel);
+
+    // Update message
     setTimeout(() => {
-      this.hud.showMessage(
-        "Welcome to the Cozy Ghost Hotel. Your adventure begins..."
-      );
-    }, 3000);
+      this.hud.showMessage("The lobby has been restored to its former glory!");
+    }, 1000);
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  snapCameraToBoss() {
+    if (!this.boss || !this.player.ghost) return;
+
+    // Calculate the direction from player to boss
+    const playerPos = this.player.ghost.position;
+    const bossPos = this.boss.mesh.position;
+
+    const dx = bossPos.x - playerPos.x;
+    const dz = bossPos.z - playerPos.z;
+    const dy = bossPos.y - playerPos.y;
+
+    // Calculate yaw (horizontal rotation)
+    const yaw = Math.atan2(-dx, -dz);
+
+    // Calculate pitch (vertical rotation) - looking slightly up at the boss
+    const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+    const pitch = Math.atan2(dy, horizontalDist);
+
+    // Store the target camera rotation
+    this.cameraSnapTarget = { yaw, pitch };
+    this.cameraSnapActive = true;
+
+    console.log(`Snapping camera to boss - Yaw: ${yaw.toFixed(2)}, Pitch: ${pitch.toFixed(2)}`);
+  }
+
+  getCameraSnapRotation() {
+    if (this.cameraSnapActive && this.cameraSnapTarget) {
+      this.cameraSnapActive = false; // Only snap once
+      return this.cameraSnapTarget;
+    }
+    return null;
   }
 }

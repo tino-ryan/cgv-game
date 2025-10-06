@@ -85,16 +85,22 @@ export default class Tutorial {
 
     const playerPos = this.player.ghost.position.clone();
 
+    // Safe positions relative to player, staying within room bounds
     const directions = [
-      { key: "forward", offset: new THREE.Vector3(0, 0, -5) },
-      { key: "left", offset: new THREE.Vector3(-5, 0, 0) },
-      { key: "right", offset: new THREE.Vector3(5, 0, 0) },
-      { key: "back", offset: new THREE.Vector3(0, 0, 5) },
+      { key: "forward", offset: new THREE.Vector3(0, 0, -4) },
+      { key: "left", offset: new THREE.Vector3(-4, 0, 0) },
+      { key: "right", offset: new THREE.Vector3(4, 0, 0) },
+      { key: "back", offset: new THREE.Vector3(0, 0, 4) },
     ];
 
     directions.forEach((dir) => {
-      const orbPos = playerPos.clone().add(dir.offset);
+      let orbPos = playerPos.clone().add(dir.offset);
       orbPos.y = 1.5;
+
+      // Clamp to room bounds (approximate lobby size)
+      orbPos.x = Math.max(-20, Math.min(20, orbPos.x));
+      orbPos.z = Math.max(-15, Math.min(15, orbPos.z));
+
       const orb = this.createOrb(orbPos, 0xffff00);
       orb.userData.direction = dir.key;
       this.movementOrbs.push(orb);
@@ -109,17 +115,26 @@ export default class Tutorial {
 
     const playerPos = this.player.ghost.position.clone();
 
+    // Safer positions - closer to player and within room bounds
+    // Positioned in open areas away from furniture
     const positions = [
-      new THREE.Vector3(-6, 2, -8),
-      new THREE.Vector3(6, 2, -8),
-      new THREE.Vector3(-8, 2, -3),
-      new THREE.Vector3(8, 2, -3),
-      new THREE.Vector3(0, 2, -10),
+      new THREE.Vector3(-4, 3.5, -6),  // Left front
+      new THREE.Vector3(4, 3.5, -6),   // Right front
+      new THREE.Vector3(-5, 3.5, 0),   // Left center
+      new THREE.Vector3(5, 3.5, 0),    // Right center
+      new THREE.Vector3(0, 3.5, -8),   // Center front
     ];
 
     const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff];
 
     positions.forEach((offset, index) => {
+      let boxPos = playerPos.clone().add(offset);
+
+      // Clamp to room bounds
+      boxPos.x = Math.max(-18, Math.min(18, boxPos.x));
+      boxPos.z = Math.max(-12, Math.min(12, boxPos.z));
+      boxPos.y = 3.5; // Higher up - easier to see and shoot
+
       const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
       const material = new THREE.MeshStandardMaterial({
         color: colors[index],
@@ -128,7 +143,7 @@ export default class Tutorial {
       });
 
       const box = new THREE.Mesh(geometry, material);
-      box.position.copy(playerPos).add(offset);
+      box.position.copy(boxPos);
       box.userData.isEnemy = true;
       box.userData.isSuspicious = true;
 
@@ -158,6 +173,10 @@ export default class Tutorial {
       this.marker.position.x += 3;
       this.marker.position.z -= 5;
       this.marker.position.y = 1.5;
+
+      // Clamp to room bounds
+      this.marker.position.x = Math.max(-20, Math.min(20, this.marker.position.x));
+      this.marker.position.z = Math.max(-15, Math.min(15, this.marker.position.z));
     }
 
     this.scene.add(this.marker);

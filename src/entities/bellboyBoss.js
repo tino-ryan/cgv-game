@@ -1,10 +1,11 @@
 import * as THREE from "three";
 
 export default class BellboyBoss {
-  constructor(scene, player, hud, opts = {}) {
+  constructor(scene, player, hud, physics, opts = {}) {
     this.scene = scene;
     this.player = player;
     this.hud = hud;
+    this.physics = physics; // Reference to physics system
 
     this.health = 100;
     this.maxHealth = 100;
@@ -38,13 +39,8 @@ export default class BellboyBoss {
 
     this.mesh = new THREE.Mesh(geometry, material);
 
-    // Position boss in front of player (if available)
-    if (this.player && this.player.ghost) {
-      const playerPos = this.player.ghost.position.clone();
-      this.mesh.position.set(playerPos.x, 1.5, playerPos.z - 10);
-    } else {
-      this.mesh.position.set(0, 1.5, -10);
-    }
+    // Fixed spawn position
+    this.mesh.position.set(19, 1.5, -4);
 
     // Add eyes as children (so raycast needs to consider children)
     const eyeGeometry = new THREE.SphereGeometry(0.2, 16, 16);
@@ -181,26 +177,65 @@ export default class BellboyBoss {
         playerPos.y = 0;
         bossPos.y = 0;
         const distance = bossPos.distanceTo(playerPos);
-        
+
         // Calculate direction to player (only on XZ plane)
         const direction = new THREE.Vector3()
           .subVectors(this.player.ghost.position, this.mesh.position)
           .normalize();
         direction.y = 0; // Keep movement on ground plane
-        
+
         // Only move if not within minimum distance
         if (distance > this.minDistance) {
-          // Move towards player
-          this.mesh.position.x += direction.x * this.chaseSpeed;
-          this.mesh.position.z += direction.z * this.chaseSpeed;
-          
+          // Calculate desired movement
+          const moveVector = direction.clone();
+          const currentPos = new THREE.Vector3(
+            this.mesh.position.x,
+            0,
+            this.mesh.position.z
+          );
+
+          // Get collision-safe movement from physics system
+          let safeMovement;
+          if (this.physics) {
+            safeMovement = this.physics.getSafeMovement(
+              currentPos,
+              moveVector,
+              this.chaseSpeed
+            );
+          } else {
+            // Fallback if no physics
+            safeMovement = moveVector.multiplyScalar(this.chaseSpeed);
+          }
+
+          // Apply safe movement
+          this.mesh.position.x += safeMovement.x;
+          this.mesh.position.z += safeMovement.z;
+
           // Face the player
           const lookPos = this.player.ghost.position.clone();
           this.mesh.lookAt(lookPos.x, this.mesh.position.y, lookPos.z);
         } else if (distance < this.minDistance - 1) {
-          // Too close, back away slightly
-          this.mesh.position.x -= direction.x * this.chaseSpeed * 0.5;
-          this.mesh.position.z -= direction.z * this.chaseSpeed * 0.5;
+          // Too close, back away slightly (with collision check)
+          const backDirection = direction.clone().multiplyScalar(-1);
+          const currentPos = new THREE.Vector3(
+            this.mesh.position.x,
+            0,
+            this.mesh.position.z
+          );
+
+          let safeMovement;
+          if (this.physics) {
+            safeMovement = this.physics.getSafeMovement(
+              currentPos,
+              backDirection,
+              this.chaseSpeed * 0.5
+            );
+          } else {
+            safeMovement = backDirection.multiplyScalar(this.chaseSpeed * 0.5);
+          }
+
+          this.mesh.position.x += safeMovement.x;
+          this.mesh.position.z += safeMovement.z;
         }
       } else {
         // Normal rotation when not chasing

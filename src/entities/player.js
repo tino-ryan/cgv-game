@@ -50,7 +50,8 @@ export default class Player {
       const loader = new GLTFLoader();
       const gltf = await loader.loadAsync(url);
       this.ghost = gltf.scene;
-      this.ghost.position.y = this.hoverHeight;
+      //this.ghost.position.y = this.hoverHeight;
+      this.ghost.position.set(10, this.hoverHeight, 0);
       this.scene.add(this.ghost);
       console.log("Ghost loaded successfully");
     } catch (error) {
