@@ -1,12 +1,13 @@
-//src/entities/player.js
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { loadAssets } from "../core/loader.js";
+import { Health } from "./health.js";
 
 export default class Player {
-  constructor(scene, camera) {
+  constructor(scene, camera, hud) {
     this.scene = scene;
     this.camera = camera;
+    this.hud = hud; // HUD reference for updating hearts
 
     this.ghost = null;
     this.gun = null;
@@ -14,6 +15,8 @@ export default class Player {
 
     this.combatMode = false;
     this.gunEquipped = false;
+    this.health = new Health(5); // 5 hearts
+    this._isDead = false; 
 
     this.cameraOffset = new THREE.Vector3(0, 1.5, 5);
     this.hoverHeight = 1.5;
@@ -30,6 +33,11 @@ export default class Player {
 
     this.tracerDuration = 0.1;
     this.tracerMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+
+    // Initialize HUD hearts
+    if (this.hud) {
+      this.hud.updatePlayerHearts(this.health.current, this.health.max);
+    }
   }
 
   setTutorial(tutorial) {
@@ -104,7 +112,6 @@ export default class Player {
 
     this.camera.position.set(0, 1.6, 0);
 
-    // Remove any existing listener first
     if (this.shootHandler) {
       window.removeEventListener("mousedown", this.shootHandler);
     }
@@ -143,8 +150,7 @@ export default class Player {
       this.ghost.position.y = this.hoverHeight;
     }
   }
-
-  shoot() {
+shoot() {
     if (!this.canShoot || !this.gun) return;
     this.canShoot = false;
     setTimeout(() => (this.canShoot = true), this.shootCooldown * 1000);
@@ -157,35 +163,55 @@ export default class Player {
 
     this.raycaster.set(gunPosition, direction);
 
-    const enemies = this.scene.children.filter(obj => obj.userData.isEnemy);
+    // Check for both enemies AND boss
+    const enemies = this.scene.children.filter(obj => obj.userData.isEnemy || obj.userData.isBoss);
     const intersects = this.raycaster.intersectObjects(enemies, true);
 
     let tracerEnd = new THREE.Vector3();
+    let hitBoss = false;
+    
     if (intersects.length > 0) {
       const hit = intersects[0].object;
-      const hitPosition = hit.position.clone();
+      const hitPosition = intersects[0].point.clone();
       tracerEnd.copy(hitPosition);
 
-      // Remove from scene
-      this.scene.remove(hit);
-      if (hit.geometry) hit.geometry.dispose();
-      if (hit.material) hit.material.dispose();
+      // Check if we hit the boss (check the hit object or its parent)
+      let bossObject = hit;
+      while (bossObject && !bossObject.userData.isBoss) {
+        bossObject = bossObject.parent;
+      }
 
-      // Remove from tutorial list
-      if (this.tutorial) {
-        const idx = this.tutorial.disguisedObjects.indexOf(hit);
-        if (idx !== -1) {
-          this.tutorial.disguisedObjects.splice(idx, 1);
+      if (bossObject && bossObject.userData.isBoss) {
+        hitBoss = true;
+        console.log("🎯 Boss hit!");
+        
+        // Find the boss instance and damage it
+        if (this.scene.userData.boss) {
+          this.scene.userData.boss.takeDamage(10);
+          
+          // Show hit marker
+          if (this.scene.userData.lobbyScene) {
+            this.scene.userData.lobbyScene.showHitMarker();
+          }
         }
+      } else {
+        // Regular enemy hit (tutorial objects)
+        this.scene.remove(hit);
+        if (hit.geometry) hit.geometry.dispose();
+        if (hit.material) hit.material.dispose();
 
-        // Emit spirit particles at hit position
-        this.tutorial.releaseSpirit(hitPosition);
+        if (this.tutorial) {
+          const idx = this.tutorial.disguisedObjects.indexOf(hit);
+          if (idx !== -1) {
+            this.tutorial.disguisedObjects.splice(idx, 1);
+          }
+          this.tutorial.releaseSpirit(hitPosition);
+        }
       }
     } else {
       tracerEnd.copy(gunPosition).add(direction.clone().multiplyScalar(50));
     }
 
-    // Draw tracer line
     const geometry = new THREE.BufferGeometry().setFromPoints([
       gunPosition.clone(),
       tracerEnd
@@ -198,4 +224,34 @@ export default class Player {
       geometry.dispose();
     }, this.tracerDuration * 1000);
   }
+  takeDamage(amount = 1) {
+    // Guard against multiple damage calls when already dead
+    if (this.health.current <= 0) return;
+    
+    this.health.takeDamage(amount);
+    console.log(`Player HP: ${this.health.current}/${this.health.max}`);
+    
+    if (this.hud) {
+      this.hud.updatePlayerHearts(this.health.current, this.health.max);
+    }
+    
+    // Check death AFTER updating UI
+    if (this.health.current <= 0) {
+      this.health.current = 0; // Ensure it's exactly 0
+      this.onDeath();
+    }
+  }
+
+
+onDeath() {
+  // Only trigger death once
+  if (this._isDead) return;
+  this._isDead = true;
+  
+  console.log("💀 Player defeated!");
+  // Trigger game over through the scene
+  if (window.lobbyScene) {
+    window.lobbyScene.handlePlayerDefeat();
+  }
+}
 }

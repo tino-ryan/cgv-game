@@ -2,9 +2,10 @@
 import * as THREE from "three";
 
 export default class Tutorial {
-  constructor(hud, scene, player) {
+  constructor(hud, lobbyScene, player) {
     this.hud = hud;
-    this.scene = scene;
+    this.lobbyScene = lobbyScene; // Store reference to lobby scene
+    this.scene = lobbyScene.scene; // Store reference to Three.js scene for adding objects
     this.player = player;
     this.phase = 0;
     this.marker = null;
@@ -48,9 +49,9 @@ export default class Tutorial {
     this.showMessage(this.phases[0].msg);
 
     setTimeout(() => {
-      this.showMessage("Double-click to enable Look Mode, then move your mouse to look around. ");
+      this.showMessage("Double-click to enable Look Mode, then move your mouse to look around. Press ESC to exit Look Mode.");
       this.executePhase();
-    }, 3000);
+    }, 2000);
   }
 
   executePhase() {
@@ -66,7 +67,7 @@ export default class Tutorial {
         break;
       case "firstMove":
         this.spawnMarker(currentPhase.pos, 0x00ffcc);
-        this.showMessage(currentPhase.msg + " Arrow Keys to move.");
+        this.showMessage(currentPhase.msg + " Use WASD or Arrow Keys to move.");
         break;
       case "movementTraining":
         this.startMovementTraining();
@@ -183,7 +184,6 @@ export default class Tutorial {
 
   createProgressBar() {
     this.progressBar = document.createElement("div");
-    this.progressBar.style.marginTop = "10px";
     this.progressBar.style.position = "absolute";
     this.progressBar.style.top = "200px";
     this.progressBar.style.left = "20px";
@@ -293,10 +293,13 @@ export default class Tutorial {
     if (this.spiritsFreed >= this.totalSpirits) {
       setTimeout(() => {
         this.removeSubgoalsUI();
-        this.showMessage("🎉 Tutorial Complete! You're ready to manage the hotel!");
-        this.player.exitCombat();
+        this.showMessage("🎉 Tutorial Complete! Get ready for the Boss Fight...");
 
         setTimeout(() => {
+          // Notify lobby scene to start boss fight
+          if (this.lobbyScene && this.lobbyScene.startBossFight) {
+            this.lobbyScene.startBossFight();
+          }
           this.phase++;
           this.executePhase();
         }, 3000);
@@ -346,6 +349,11 @@ export default class Tutorial {
     const deltaYaw = Math.abs(yaw - this.initialYaw);
     const deltaPitch = Math.abs(pitch - this.initialPitch);
     const totalDelta = deltaYaw + deltaPitch;
+
+    // Debug logging
+    if (totalDelta > 0.01) {
+      console.log(`Camera movement - Yaw: ${deltaYaw.toFixed(3)}, Pitch: ${deltaPitch.toFixed(3)}, Total: ${totalDelta.toFixed(3)}, Threshold: ${this.cameraMovementThreshold}`);
+    }
 
     if (totalDelta > this.cameraMovementThreshold) {
       this.cameraMovementDetected = true;
@@ -449,9 +457,8 @@ export default class Tutorial {
   }
 
   showMessage(msg) {
-    if (this.hud) {
-      this.hud.innerText = msg;
-      this.hud.style.display = msg ? "block" : "none";
+    if (this.hud && this.hud.showMessage) {
+      this.hud.showMessage(msg);
     }
   }
 }

@@ -1,22 +1,21 @@
 import * as THREE from "three";
 import { initRenderer } from "./core/renderer.js";
-import { initScene } from "./core/scene.js";
-import { initLoop } from "./core/loop.js";
-import Player from "./entities/player.js";
-import Tutorial from "./systems/tutorial.js";
+import LobbyScene from "./scenes/lobbyScene.js";
 
-let renderer, scene, camera, player, tutorial;
-const moveSpeed = 0.1;
+let renderer, camera, lobbyScene;
+const mouseSensitivity = 0.002;
+
 let yaw = 0;
 let pitch = 0;
-const mouseSensitivity = 0.002;
 
 const yawObject = new THREE.Object3D();
 const pitchObject = new THREE.Object3D();
 
 async function init() {
+  // Initialize renderer
   renderer = initRenderer();
-  scene = initScene();
+  
+  // Initialize camera
   camera = new THREE.PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
@@ -24,30 +23,23 @@ async function init() {
     1000
   );
   camera.position.set(0, 2, 5);
-  console.log("Renderer initialized:", renderer);
-  console.log("Scene initialized:", scene);
-  console.log("Camera initialized:", camera);
 
+  // Set up camera hierarchy for rotation
   yawObject.add(pitchObject);
   pitchObject.add(camera);
-  scene.add(yawObject);
 
-  player = new Player(scene, camera);
+  console.log("Renderer initialized:", renderer);
+  console.log("Camera initialized:", camera);
 
-  await player.loadGhost("/assets/models/scene.gltf");
-  await player.loadGun("/assets/models/gun.glb");
+  // Create lobby scene (includes tutorial and boss)
+  lobbyScene = new LobbyScene(renderer, camera);
+  lobbyScene.scene.add(yawObject);
 
-  // Create tutorial and link it to player
-  const hud = document.getElementById("tutorial-hud");
-  tutorial = new Tutorial(hud, scene, player);
-  player.setTutorial(tutorial); // Important: Link tutorial to player
-
-  tutorial.start(yaw, pitch);
-
-  // Pointer Lock
-  document.body.addEventListener("click", () => {
+  // Pointer Lock - activate on double-click
+  document.body.addEventListener("dblclick", () => {
     if (document.pointerLockElement !== document.body) {
       document.body.requestPointerLock();
+      console.log("Requesting pointer lock...");
     }
   });
 
@@ -59,6 +51,12 @@ async function init() {
     }
   });
 
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.pointerLockElement === document.body) {
+      document.exitPointerLock();
+    }
+  });
+
   document.addEventListener("mousemove", (event) => {
     if (document.pointerLockElement === document.body) {
       yaw -= event.movementX * mouseSensitivity;
@@ -67,6 +65,7 @@ async function init() {
     }
   });
 
+  // Keyboard controls
   const keys = {
     up: false,
     down: false,
@@ -93,15 +92,19 @@ async function init() {
         keys.right = true;
         break;
       case "w":
+      case "W":
         keys.w = true;
         break;
       case "a":
+      case "A":
         keys.a = true;
         break;
       case "s":
+      case "S":
         keys.s = true;
         break;
       case "d":
+      case "D":
         keys.d = true;
         break;
     }
@@ -122,34 +125,42 @@ async function init() {
         keys.right = false;
         break;
       case "w":
+      case "W":
         keys.w = false;
         break;
       case "a":
+      case "A":
         keys.a = false;
         break;
       case "s":
+      case "S":
         keys.s = false;
         break;
       case "d":
+      case "D":
         keys.d = false;
         break;
     }
   });
 
-  let prevTime = performance.now();
-  initLoop(renderer, scene, camera, null, (time) => {
-    const delta = (time - prevTime) / 1000;
-    prevTime = time;
+  // Main game loop
+  function animate() {
+    requestAnimationFrame(animate);
 
-    if (!player.ghost) return;
+    if (!lobbyScene.player.ghost) {
+      lobbyScene.update();
+      return;
+    }
 
+    // Update camera rotation
     yawObject.rotation.y = yaw;
     pitchObject.rotation.x = pitch;
 
+    // Calculate movement vectors
     let forward = new THREE.Vector3();
     let right = new THREE.Vector3();
 
-    if (player.combatMode) {
+    if (lobbyScene.player.combatMode) {
       yawObject.getWorldDirection(forward);
       forward.negate();
       forward.y = 0;
@@ -165,6 +176,8 @@ async function init() {
       right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
     }
 
+    // Apply movement
+    const moveSpeed = 0.1;
     let moveVector = new THREE.Vector3();
     if (keys.up || keys.w) moveVector.add(forward);
     if (keys.down || keys.s) moveVector.add(forward.clone().multiplyScalar(-1));
@@ -173,26 +186,34 @@ async function init() {
 
     if (moveVector.length() > 0) {
       moveVector.normalize();
-      player.ghost.position.addScaledVector(moveVector, moveSpeed);
+      lobbyScene.player.ghost.position.addScaledVector(moveVector, moveSpeed);
 
-      if (!player.combatMode) {
-        player.ghost.rotation.y =
+      if (!lobbyScene.player.combatMode) {
+        lobbyScene.player.ghost.rotation.y =
           Math.atan2(moveVector.z, -moveVector.x) + Math.PI;
       }
     }
 
-    yawObject.position.copy(player.ghost.position);
-    tutorial.update(keys, player, yaw, pitch, delta);
+    // Update camera position to follow player
+    yawObject.position.copy(lobbyScene.player.ghost.position);
 
-    player.update();
-  });
+    // Update lobby scene (tutorial, boss, etc.) - pass current yaw and pitch
+    lobbyScene.camera.rotation.y = yaw;
+    lobbyScene.camera.rotation.x = pitch;
+    lobbyScene.update();
+  }
 
-  window.enterCombat = () => player.enterCombat();
-  window.exitCombat = () => player.exitCombat();
+  animate();
+
+  // Debug helpers
+  window.enterCombat = () => lobbyScene.player.enterCombat();
+  window.exitCombat = () => lobbyScene.player.exitCombat();
+  window.startBoss = () => lobbyScene.startBossFight();
 }
 
 init().catch((error) => console.error("Init failed:", error));
 
+// Handle window resize
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
