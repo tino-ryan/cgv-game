@@ -1,0 +1,11 @@
+Model Information:
+* title:	Future #10: Bell of Service
+* source:	https://sketchfab.com/3d-models/future-10-bell-of-service-00f700aa36804996b9ee77bc53e80c75
+* author:	kathinsonad (https://sketchfab.com/kathinsonad)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Future #10: Bell of Service" (https://sketchfab.com/3d-models/future-10-bell-of-service-00f700aa36804996b9ee77bc53e80c75) by kathinsonad (https://sketchfab.com/kathinsonad) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

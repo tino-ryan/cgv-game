@@ -1,11 +1,22 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export default class BellboyBoss {
-  constructor(scene, player, hud, physics, opts = {}) {
+  constructor(scene, player, hud, physicsOrOpts = {}) {
     this.scene = scene;
     this.player = player;
     this.hud = hud;
-    this.physics = physics; // Reference to physics system
+
+    // Handle both physics system and options object
+    if (physicsOrOpts && physicsOrOpts.addCollisionObject) {
+      // It's a physics system
+      this.physics = physicsOrOpts;
+      this.debug = false;
+    } else {
+      // It's an options object
+      this.physics = physicsOrOpts.physics || null;
+      this.debug = physicsOrOpts.debug || false;
+    }
 
     this.health = 100;
     this.maxHealth = 100;
@@ -19,13 +30,125 @@ export default class BellboyBoss {
 
     // Chase mechanics
     this.isChasing = false;
-    this.chaseSpeed = 0.05; // Movement speed when chasing
-    this.minDistance = 5; // Don't get closer than this
+    this.chaseSpeed = 0.05;
+    this.minDistance = 5;
     this.chaseMessageShown = false;
 
-    this.debug = opts.debug || false;
+    // GLTF Loader for projectile models
+    this.gltfLoader = new GLTFLoader();
+    this.projectileModels = [];
+    this.modelsLoaded = false;
+    
+    // Special bell object (not thrown)
+    this.bellObject = null;
+    this.bellLoaded = false;
+
+    // Load all projectile models and the bell
+    this.loadProjectileModels();
+    this.loadBellObject();
 
     this.createBoss();
+  }
+
+  loadProjectileModels() {
+    // Paths relative to public folder (works with Vite, CRA, etc.)
+    const modelPaths = [
+      '/assets/models/pillow/scene.gltf',
+      '/assets/models/flower_pot/scene.gltf',
+      '/assets/models/key/scene.gltf',
+      '/assets/models/suitcases/scene.gltf',
+      '/assets/models/coffee_mug/scene.gltf',
+      '/assets/models/succulent/scene.gltf'
+    ];
+
+    let loadedCount = 0;
+
+    modelPaths.forEach((path, index) => {
+      this.gltfLoader.load(
+        path,
+        (gltf) => {
+          // Store the loaded model
+          this.projectileModels.push(gltf.scene.clone());
+          loadedCount++;
+
+          console.log(`Loaded projectile model ${index + 1}/${modelPaths.length}: ${path}`);
+
+          if (loadedCount === modelPaths.length) {
+            this.modelsLoaded = true;
+            console.log("✅ All projectile models loaded!");
+          }
+        },
+        // Progress callback
+        (xhr) => {
+          if (this.debug) {
+            console.log(`${path}: ${(xhr.loaded / xhr.total * 100)}% loaded`);
+          }
+        },
+        // Error callback
+        (error) => {
+          console.error(`Error loading ${path}:`, error);
+          // Fallback: create a simple sphere if model fails to load
+          const fallbackGeometry = new THREE.SphereGeometry(0.25, 12, 12);
+          const fallbackMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+            emissive: 0xff0000,
+            emissiveIntensity: 0.5,
+          });
+          const fallbackMesh = new THREE.Mesh(fallbackGeometry, fallbackMaterial);
+          this.projectileModels.push(fallbackMesh);
+          loadedCount++;
+
+          if (loadedCount === modelPaths.length) {
+            this.modelsLoaded = true;
+            console.log("⚠️ All projectile models loaded (some fallbacks used)");
+          }
+        }
+      );
+    });
+  }
+
+  loadBellObject() {
+    const bellPath = '/assets/models/future_10_bell_of_service/scene.gltf';
+    
+    this.gltfLoader.load(
+      bellPath,
+      (gltf) => {
+        this.bellObject = gltf.scene;
+        this.bellLoaded = true;
+        
+        // Scale the bell appropriately
+        this.bellObject.scale.set(0.8, 0.8, 0.8);
+        
+        // Position it near the boss (or wherever you want it)
+        // You can adjust this position as needed
+        this.bellObject.position.set(0, 0.5, -12);
+        
+        // Add some glow/magic effect
+        this.bellObject.traverse((child) => {
+          if (child.isMesh) {
+            // Make it slightly emissive for a magical look
+            if (child.material) {
+              child.material.emissive = new THREE.Color(0xffdd00);
+              child.material.emissiveIntensity = 0.3;
+            }
+            child.userData.isMagicBell = true;
+          }
+        });
+        
+        this.scene.add(this.bellObject);
+        console.log("🔔 Magic Bell of Service loaded!");
+      },
+      // Progress callback
+      (xhr) => {
+        if (this.debug) {
+          console.log(`Bell: ${(xhr.loaded / xhr.total * 100)}% loaded`);
+        }
+      },
+      // Error callback
+      (error) => {
+        console.error(`Error loading bell:`, error);
+      }
+    );
   }
 
   createBoss() {
@@ -39,10 +162,15 @@ export default class BellboyBoss {
 
     this.mesh = new THREE.Mesh(geometry, material);
 
-    // Fixed spawn position
-    this.mesh.position.set(19, 1.5, -4);
+    // Position boss in front of player (if available)
+    if (this.player && this.player.ghost) {
+      const playerPos = this.player.ghost.position.clone();
+      this.mesh.position.set(playerPos.x, 1.5, playerPos.z - 10);
+    } else {
+      this.mesh.position.set(0, 1.5, -10);
+    }
 
-    // Add eyes as children (so raycast needs to consider children)
+    // Add eyes as children
     const eyeGeometry = new THREE.SphereGeometry(0.2, 16, 16);
     const eyeMaterial = new THREE.MeshStandardMaterial({
       color: 0xffff00,
@@ -58,20 +186,18 @@ export default class BellboyBoss {
     rightEye.position.set(0.4, 0.5, 1.1);
     this.mesh.add(rightEye);
 
-    // Make raycasting reliable: compute bounds for any child mesh
+    // Make raycasting reliable
     this.mesh.traverse((child) => {
       if (child.isMesh && child.geometry) {
         try {
           if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
           if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
         } catch (e) {
-          // ignore geometry compute errors in case geometry is missing or nonstandard
+          // ignore geometry compute errors
         }
-        // Avoid frustum culling surprises
         child.frustumCulled = false;
       }
     });
-    // Also for top-level mesh
     this.mesh.frustumCulled = false;
     this.mesh.userData.isBoss = true;
 
@@ -89,29 +215,65 @@ export default class BellboyBoss {
   shoot() {
     if (!this.player || !this.player.ghost || !this.isAlive) return;
 
-    const projectileGeometry = new THREE.SphereGeometry(0.25, 12, 12);
-    const projectileMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff0000,
-      emissive: 0xff0000,
-      emissiveIntensity: 1,
-    });
+    // Use loaded GLTF models if available, otherwise fallback to sphere
+    let projectile;
 
-    const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
+    if (this.modelsLoaded && this.projectileModels.length > 0) {
+      // Pick a random model from the loaded ones
+      const randomIndex = Math.floor(Math.random() * this.projectileModels.length);
+      projectile = this.projectileModels[randomIndex].clone();
+
+      // Scale the projectile appropriately (adjust as needed)
+      projectile.scale.set(0.5, 0.5, 0.5);
+
+      // Make sure all children are set up for raycasting
+      projectile.traverse((child) => {
+        if (child.isMesh) {
+          child.userData.isProjectile = true;
+          if (child.geometry) {
+            try {
+              if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
+              if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+            } catch (e) {
+              // ignore
+            }
+          }
+        }
+      });
+    } else {
+      // Fallback: create a sphere if models aren't loaded yet
+      const projectileGeometry = new THREE.SphereGeometry(0.25, 12, 12);
+      const projectileMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff0000,
+        emissive: 0xff0000,
+        emissiveIntensity: 1,
+      });
+      projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
+      projectile.userData.isProjectile = true;
+    }
+
+    // Position at boss location
     projectile.position.copy(this.mesh.position);
 
-    // Direction to player's ghost (world positions)
+    // Direction to player's ghost
     const targetPos = this.player.ghost.position.clone();
     const dir = new THREE.Vector3().subVectors(targetPos, this.mesh.position).normalize();
     projectile.userData.velocity = dir.multiplyScalar(0.25);
 
+    // Add rotation for visual effect
+    projectile.userData.rotationSpeed = {
+      x: (Math.random() - 0.5) * 0.1,
+      y: (Math.random() - 0.5) * 0.1,
+      z: (Math.random() - 0.5) * 0.1
+    };
+
+    // Lifetime management
+    projectile.userData.age = 0;
+    projectile.userData.maxAge = 10;
+
     this.projectiles.push(projectile);
     this.scene.add(projectile);
 
-    // small lifetime guard
-    projectile.userData.age = 0;
-    projectile.userData.maxAge = 10; // seconds
-
-    // console log only in debug
     if (this.debug) console.log("Boss shot projectile!");
   }
 
@@ -137,7 +299,7 @@ export default class BellboyBoss {
     this.defeated = true;
     console.log("Boss defeated!");
 
-    // Fade out and remove
+    // Fade out and remove boss
     let opacity = 1;
     const fadeOut = setInterval(() => {
       opacity -= 0.03;
@@ -158,11 +320,20 @@ export default class BellboyBoss {
         }
       }
     }, 40);
+    
+    // Make the bell glow brighter when boss is defeated (magical effect)
+    if (this.bellObject && this.bellLoaded) {
+      this.bellObject.traverse((child) => {
+        if (child.isMesh && child.material) {
+          child.material.emissiveIntensity = 0.8;
+        }
+      });
+    }
   }
 
   update(delta, time) {
     if (!this.isAlive) {
-      // optionally update projectiles even if boss dead (they might still fly)
+      // optionally update projectiles even if boss dead
     }
 
     if (this.mesh) {
@@ -173,73 +344,52 @@ export default class BellboyBoss {
       if (this.isChasing && this.player && this.player.ghost) {
         const playerPos = this.player.ghost.position.clone();
         const bossPos = this.mesh.position.clone();
-        bossPos.y = playerPos.y; // Ignore Y for distance calculation
+        bossPos.y = playerPos.y;
         playerPos.y = 0;
         bossPos.y = 0;
         const distance = bossPos.distanceTo(playerPos);
-
+        
         // Calculate direction to player (only on XZ plane)
         const direction = new THREE.Vector3()
           .subVectors(this.player.ghost.position, this.mesh.position)
           .normalize();
-        direction.y = 0; // Keep movement on ground plane
-
+        direction.y = 0;
+        
         // Only move if not within minimum distance
         if (distance > this.minDistance) {
-          // Calculate desired movement
-          const moveVector = direction.clone();
-          const currentPos = new THREE.Vector3(
-            this.mesh.position.x,
-            0,
-            this.mesh.position.z
-          );
-
-          // Get collision-safe movement from physics system
-          let safeMovement;
-          if (this.physics) {
-            safeMovement = this.physics.getSafeMovement(
-              currentPos,
-              moveVector,
-              this.chaseSpeed
-            );
-          } else {
-            // Fallback if no physics
-            safeMovement = moveVector.multiplyScalar(this.chaseSpeed);
-          }
-
-          // Apply safe movement
-          this.mesh.position.x += safeMovement.x;
-          this.mesh.position.z += safeMovement.z;
-
+          this.mesh.position.x += direction.x * this.chaseSpeed;
+          this.mesh.position.z += direction.z * this.chaseSpeed;
+          
           // Face the player
           const lookPos = this.player.ghost.position.clone();
           this.mesh.lookAt(lookPos.x, this.mesh.position.y, lookPos.z);
         } else if (distance < this.minDistance - 1) {
-          // Too close, back away slightly (with collision check)
-          const backDirection = direction.clone().multiplyScalar(-1);
-          const currentPos = new THREE.Vector3(
-            this.mesh.position.x,
-            0,
-            this.mesh.position.z
-          );
-
-          let safeMovement;
-          if (this.physics) {
-            safeMovement = this.physics.getSafeMovement(
-              currentPos,
-              backDirection,
-              this.chaseSpeed * 0.5
-            );
-          } else {
-            safeMovement = backDirection.multiplyScalar(this.chaseSpeed * 0.5);
-          }
-
-          this.mesh.position.x += safeMovement.x;
-          this.mesh.position.z += safeMovement.z;
+          // Too close, back away slightly
+          this.mesh.position.x -= direction.x * this.chaseSpeed * 0.5;
+          this.mesh.position.z -= direction.z * this.chaseSpeed * 0.5;
         }
       } else {
         // Normal rotation when not chasing
         this.mesh.rotation.y += 0.01;
+      }
+    }
+    
+    // Animate the bell (hover + glow pulse)
+    if (this.bellObject && this.bellLoaded) {
+      // Gentle hovering
+      this.bellObject.position.y = 0.5 + Math.sin(time * 1.5) * 0.15;
+      
+      // Gentle rotation
+      this.bellObject.rotation.y = time * 0.3;
+      
+      // Pulse the glow if boss is alive
+      if (this.isAlive) {
+        const pulseIntensity = 0.3 + Math.sin(time * 2) * 0.1;
+        this.bellObject.traverse((child) => {
+          if (child.isMesh && child.material && child.material.emissive) {
+            child.material.emissiveIntensity = pulseIntensity;
+          }
+        });
       }
     }
 
@@ -253,16 +403,28 @@ export default class BellboyBoss {
     // update projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const proj = this.projectiles[i];
+      
+      // Move projectile
       if (proj.userData.velocity) {
         proj.position.add(proj.userData.velocity);
       }
+      
+      // Rotate projectile for visual effect
+      if (proj.userData.rotationSpeed) {
+        proj.rotation.x += proj.userData.rotationSpeed.x;
+        proj.rotation.y += proj.userData.rotationSpeed.y;
+        proj.rotation.z += proj.userData.rotationSpeed.z;
+      }
+      
+      // Age management
       proj.userData.age = (proj.userData.age || 0) + delta;
       if (proj.userData.age > (proj.userData.maxAge || 8)) {
         try { this.scene.remove(proj); } catch (e) {}
         this.projectiles.splice(i, 1);
         continue;
       }
-      // remove if far from boss origin to avoid leaks
+      
+      // Remove if too far
       if (this.mesh && proj.position.distanceTo(this.mesh.position) > 200) {
         try { this.scene.remove(proj); } catch (e) {}
         this.projectiles.splice(i, 1);
