@@ -41,17 +41,18 @@ export default class LobbyScene {
 
     // Player (with HUD support)
     this.player = new Player(this.scene, this.camera, this.hud);
-    this.player.loadGhost("/public/assets/models/scene.gltf");
+    this.player.loadGhost("/public/assets/models/mainchar.glb");
     this.player.loadGun("/public/assets/models/gun.glb");
 
     // Set global reference so player can call handlePlayerDefeat
     window.lobbyScene = this;
 
     // Tutorial (with HUD + Player)
-    // Pass the scene reference so tutorial can call startBossFight
     this.tutorial = new Tutorial(this.hud, this, this.player);
     this.player.setTutorial(this.tutorial);
-    this.tutorial.start(this.camera.rotation.y, this.camera.rotation.x);
+
+    // Load orb models for tutorial
+    this.loadTutorialOrbModels();
 
     // Boss will spawn later
     this.boss = null;
@@ -59,6 +60,29 @@ export default class LobbyScene {
 
     // Game state
     this.gameOver = false;
+  }
+
+  async loadTutorialOrbModels() {
+    // Define the paths to your orb models
+    // You can use different models for each direction
+    const orbModelPaths = [
+      "/assets/models/cc0_-_bucket_3.glb", // Model 0 - for first move & back
+      "/assets/models/feather_duster.glb", // Model 1 - for forward
+      "/assets/models/soap.glb", // Model 2 - for left
+      "/assets/models/sponge.glb", // Model 3 - for right
+    ];
+
+    try {
+      await this.tutorial.loadOrbModels(orbModelPaths);
+      console.log("✅ Tutorial orb models loaded successfully");
+
+      // Start tutorial after models are loaded
+      this.tutorial.start(this.camera.rotation.y, this.camera.rotation.x);
+    } catch (error) {
+      console.error("❌ Error loading tutorial orb models:", error);
+      // Start tutorial anyway with fallback spheres
+      this.tutorial.start(this.camera.rotation.y, this.camera.rotation.x);
+    }
   }
 
   async loadLobbyEnvironment() {
@@ -142,7 +166,7 @@ export default class LobbyScene {
     if (this.player._isDead) return;
 
     const playerPos = this.player.ghost.position;
-    const hitRadius = 1.0; // Distance to consider a hit
+    const hitRadius = 1.0;
 
     for (let i = this.boss.projectiles.length - 1; i >= 0; i--) {
       const projectile = this.boss.projectiles[i];
@@ -151,7 +175,6 @@ export default class LobbyScene {
       const distance = projectile.position.distanceTo(playerPos);
 
       if (distance < hitRadius) {
-        // Player is hit!
         console.log("Player hit by boss projectile!");
 
         // Remove projectile first

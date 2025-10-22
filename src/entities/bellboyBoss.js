@@ -1,5 +1,7 @@
 import * as THREE from "three";
 
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+
 export default class BellboyBoss {
   constructor(scene, player, hud, physics, opts = {}) {
     this.scene = scene;
@@ -7,8 +9,8 @@ export default class BellboyBoss {
     this.hud = hud;
     this.physics = physics; // Reference to physics system
 
-    this.health = 100;
-    this.maxHealth = 100;
+    this.health = 200;
+    this.maxHealth = 200;
     this.isAlive = true;
     this.defeated = false;
     this.defeatedHandled = false;
@@ -25,65 +27,56 @@ export default class BellboyBoss {
 
     this.debug = opts.debug || false;
 
-    this.createBoss();
+    this.loader = new GLTFLoader();
+
+    this.baseY = -5; // starting ground height (adjust as needed)
+
+    this.createBoss(); // async call inside
   }
 
-  createBoss() {
-    // Boss body
-    const geometry = new THREE.BoxGeometry(2, 3, 2);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x8B0000,
-      emissive: 0x8B0000,
-      emissiveIntensity: 0.3,
-    });
+  async createBoss() {
+    try {
+      console.log("Loading Bellboy boss model...");
+      const gltf = await this.loader.loadAsync("/assets/models/evilghost.glb");
 
-    this.mesh = new THREE.Mesh(geometry, material);
+      this.mesh = gltf.scene;
+      this.mesh.scale.set(2, 2, 2);
+      this.mesh.position.set(19, 0, -4);
+      this.mesh.rotation.y = Math.PI; // Rotate 180° so the front faces the player
+      this.mesh.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          child.frustumCulled = false;
 
-    // Fixed spawn position
-    this.mesh.position.set(19, 1.5, -4);
+          // Fix weird grey lighting
+          if (child.material) {
+            child.material.side = THREE.FrontSide;
+            child.material.needsUpdate = true;
+            child.material.roughness = 0.8;
+            child.material.metalness = 0.1;
+          }
 
-    // Add eyes as children (so raycast needs to consider children)
-    const eyeGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-    const eyeMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffff00,
-      emissive: 0xffff00,
-      emissiveIntensity: 1,
-    });
-
-    const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    leftEye.position.set(-0.4, 0.5, 1.1);
-    this.mesh.add(leftEye);
-
-    const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    rightEye.position.set(0.4, 0.5, 1.1);
-    this.mesh.add(rightEye);
-
-    // Make raycasting reliable: compute bounds for any child mesh
-    this.mesh.traverse((child) => {
-      if (child.isMesh && child.geometry) {
-        try {
-          if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
+          // ensure bounding data exists
+          if (!child.geometry.boundingSphere)
+            child.geometry.computeBoundingSphere();
           if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
-        } catch (e) {
-          // ignore geometry compute errors in case geometry is missing or nonstandard
         }
-        // Avoid frustum culling surprises
-        child.frustumCulled = false;
+      });
+
+      this.mesh.userData.isBoss = true;
+      this.scene.add(this.mesh);
+
+      if (this.debug) {
+        const box = new THREE.BoxHelper(this.mesh, 0xffff00);
+        this.scene.add(box);
+        this._debugBox = box;
       }
-    });
-    // Also for top-level mesh
-    this.mesh.frustumCulled = false;
-    this.mesh.userData.isBoss = true;
 
-    this.scene.add(this.mesh);
-
-    if (this.debug) {
-      const box = new THREE.BoxHelper(this.mesh, 0xffff00);
-      this.scene.add(box);
-      this._debugBox = box;
+      console.log("✅ Bellboy Boss loaded successfully!");
+    } catch (error) {
+      console.error("❌ Failed to load Bellboy Boss model:", error);
     }
-
-    console.log("Boss spawned at:", this.mesh.position);
   }
 
   shoot() {
@@ -93,25 +86,29 @@ export default class BellboyBoss {
     const projectileMaterial = new THREE.MeshStandardMaterial({
       color: 0xff0000,
       emissive: 0xff0000,
-      emissiveIntensity: 1,
+      emissiveIntensity: 2,
     });
 
     const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
-    projectile.position.copy(this.mesh.position);
 
-    // Direction to player's ghost (world positions)
+    // Compute spawn position (roughly head height)
+    const spawnPos = this.mesh.position.clone();
+    spawnPos.y = this.baseY + 7; // lift it above floor (~5 units high)
+    projectile.position.copy(spawnPos);
+
+    // Aim directly at player
     const targetPos = this.player.ghost.position.clone();
-    const dir = new THREE.Vector3().subVectors(targetPos, this.mesh.position).normalize();
+    const dir = new THREE.Vector3().subVectors(targetPos, spawnPos).normalize();
+
+    // Set velocity toward player
     projectile.userData.velocity = dir.multiplyScalar(0.25);
 
     this.projectiles.push(projectile);
     this.scene.add(projectile);
 
-    // small lifetime guard
     projectile.userData.age = 0;
-    projectile.userData.maxAge = 10; // seconds
+    projectile.userData.maxAge = 10;
 
-    // console log only in debug
     if (this.debug) console.log("Boss shot projectile!");
   }
 
@@ -119,13 +116,13 @@ export default class BellboyBoss {
     if (!this.isAlive) return;
     this.health = Math.max(0, this.health - amount);
     console.log(`Boss took ${amount} dmg — ${this.health}/${this.maxHealth}`);
-    
+
     // Start chasing when health drops below 50%
     if (this.health < this.maxHealth * 0.5 && !this.isChasing) {
       this.isChasing = true;
       console.log("⚠️ Boss is now chasing the player!");
     }
-    
+
     if (this.health <= 0) {
       this.die();
     }
@@ -149,12 +146,16 @@ export default class BellboyBoss {
         clearInterval(fadeOut);
         if (this.mesh && this.scene) this.scene.remove(this.mesh);
         // remove projectiles
-        this.projectiles.forEach(p => {
-          try { this.scene.remove(p); } catch (e) {}
+        this.projectiles.forEach((p) => {
+          try {
+            this.scene.remove(p);
+          } catch (e) {}
         });
         this.projectiles = [];
         if (this._debugBox) {
-          try { this.scene.remove(this._debugBox); } catch (e) {}
+          try {
+            this.scene.remove(this._debugBox);
+          } catch (e) {}
         }
       }
     }, 40);
@@ -166,27 +167,32 @@ export default class BellboyBoss {
     }
 
     if (this.mesh) {
-      // Hovering animation
-      this.mesh.position.y = 1.5 + Math.sin(time * 2) * 0.3;
-      
-      // Chase player if health is below 50%
+      // Hover animation
+      this.mesh.position.y = this.baseY + Math.sin(time * 2) * 0.3;
+
+      // Always face player if they exist
+      if (this.player && this.player.ghost) {
+        const playerPos = this.player.ghost.position.clone();
+        this.mesh.lookAt(playerPos.x, this.mesh.position.y, playerPos.z);
+
+        // Rotate 90 degrees so the model front faces player correctly
+        this.mesh.rotateY(-Math.PI / 2); // adjust to -Math.PI / 2 if opposite
+      }
+
+      // Chase player if below 50% health
       if (this.isChasing && this.player && this.player.ghost) {
         const playerPos = this.player.ghost.position.clone();
         const bossPos = this.mesh.position.clone();
-        bossPos.y = playerPos.y; // Ignore Y for distance calculation
-        playerPos.y = 0;
         bossPos.y = 0;
+        playerPos.y = 0;
+
         const distance = bossPos.distanceTo(playerPos);
-
-        // Calculate direction to player (only on XZ plane)
         const direction = new THREE.Vector3()
-          .subVectors(this.player.ghost.position, this.mesh.position)
+          .subVectors(playerPos, bossPos)
           .normalize();
-        direction.y = 0; // Keep movement on ground plane
 
-        // Only move if not within minimum distance
+        // Move toward player if too far
         if (distance > this.minDistance) {
-          // Calculate desired movement
           const moveVector = direction.clone();
           const currentPos = new THREE.Vector3(
             this.mesh.position.x,
@@ -194,28 +200,18 @@ export default class BellboyBoss {
             this.mesh.position.z
           );
 
-          // Get collision-safe movement from physics system
-          let safeMovement;
-          if (this.physics) {
-            safeMovement = this.physics.getSafeMovement(
-              currentPos,
-              moveVector,
-              this.chaseSpeed
-            );
-          } else {
-            // Fallback if no physics
-            safeMovement = moveVector.multiplyScalar(this.chaseSpeed);
-          }
+          const safeMovement = this.physics
+            ? this.physics.getSafeMovement(
+                currentPos,
+                moveVector,
+                this.chaseSpeed
+              )
+            : moveVector.multiplyScalar(this.chaseSpeed);
 
-          // Apply safe movement
           this.mesh.position.x += safeMovement.x;
           this.mesh.position.z += safeMovement.z;
-
-          // Face the player
-          const lookPos = this.player.ghost.position.clone();
-          this.mesh.lookAt(lookPos.x, this.mesh.position.y, lookPos.z);
         } else if (distance < this.minDistance - 1) {
-          // Too close, back away slightly (with collision check)
+          // Back away if too close
           const backDirection = direction.clone().multiplyScalar(-1);
           const currentPos = new THREE.Vector3(
             this.mesh.position.x,
@@ -223,23 +219,17 @@ export default class BellboyBoss {
             this.mesh.position.z
           );
 
-          let safeMovement;
-          if (this.physics) {
-            safeMovement = this.physics.getSafeMovement(
-              currentPos,
-              backDirection,
-              this.chaseSpeed * 0.5
-            );
-          } else {
-            safeMovement = backDirection.multiplyScalar(this.chaseSpeed * 0.5);
-          }
+          const safeMovement = this.physics
+            ? this.physics.getSafeMovement(
+                currentPos,
+                backDirection,
+                this.chaseSpeed * 0.5
+              )
+            : backDirection.multiplyScalar(this.chaseSpeed * 0.5);
 
           this.mesh.position.x += safeMovement.x;
           this.mesh.position.z += safeMovement.z;
         }
-      } else {
-        // Normal rotation when not chasing
-        this.mesh.rotation.y += 0.01;
       }
     }
 
@@ -258,13 +248,17 @@ export default class BellboyBoss {
       }
       proj.userData.age = (proj.userData.age || 0) + delta;
       if (proj.userData.age > (proj.userData.maxAge || 8)) {
-        try { this.scene.remove(proj); } catch (e) {}
+        try {
+          this.scene.remove(proj);
+        } catch (e) {}
         this.projectiles.splice(i, 1);
         continue;
       }
       // remove if far from boss origin to avoid leaks
       if (this.mesh && proj.position.distanceTo(this.mesh.position) > 200) {
-        try { this.scene.remove(proj); } catch (e) {}
+        try {
+          this.scene.remove(proj);
+        } catch (e) {}
         this.projectiles.splice(i, 1);
       }
     }

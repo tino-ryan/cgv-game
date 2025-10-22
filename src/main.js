@@ -278,41 +278,57 @@ async function init() {
   window.startBoss = () => lobbyScene.startBossFight();
   window.toggleCollisionDebug = () => {
     lobbyScene.physics.debugEnabled = !lobbyScene.physics.debugEnabled;
-    console.log("Collision debug:", lobbyScene.physics.debugEnabled ? "ON" : "OFF");
+    console.log(
+      "Collision debug:",
+      lobbyScene.physics.debugEnabled ? "ON" : "OFF"
+    );
   };
   window.listCollisionObjects = () => {
-    console.log(`Total collision objects: ${lobbyScene.physics.collisionObjects.length}`);
+    console.log(
+      `Total collision objects: ${lobbyScene.physics.collisionObjects.length}`
+    );
     lobbyScene.physics.collisionObjects.forEach((obj, i) => {
-      console.log(`${i}: ${obj.name || 'unnamed'} - visible: ${obj.visible}, pos:`, obj.position);
+      console.log(
+        `${i}: ${obj.name || "unnamed"} - visible: ${obj.visible}, pos:`,
+        obj.position
+      );
     });
   };
   window.testRaycast = () => {
     const pos = lobbyScene.player.ghost.position;
     console.log("Testing raycast from player position:", pos);
     const raycaster = new THREE.Raycaster();
-    raycaster.set(pos.clone().add(new THREE.Vector3(0, 1.5, 0)), new THREE.Vector3(1, 0, 0));
+    raycaster.set(
+      pos.clone().add(new THREE.Vector3(0, 1.5, 0)),
+      new THREE.Vector3(1, 0, 0)
+    );
     raycaster.far = 5;
-    const hits = raycaster.intersectObjects(lobbyScene.physics.collisionObjects, false);
+    const hits = raycaster.intersectObjects(
+      lobbyScene.physics.collisionObjects,
+      false
+    );
     console.log(`Found ${hits.length} hits:`, hits);
   };
   window.highlightCollisionObjects = () => {
     // Remove old highlights
     if (window._collisionHighlights) {
-      window._collisionHighlights.forEach(h => lobbyScene.scene.remove(h));
+      window._collisionHighlights.forEach((h) => lobbyScene.scene.remove(h));
     }
     window._collisionHighlights = [];
 
     // Add box helpers to all collision objects
-    lobbyScene.physics.collisionObjects.forEach(obj => {
+    lobbyScene.physics.collisionObjects.forEach((obj) => {
       const box = new THREE.BoxHelper(obj, 0x00ff00);
       lobbyScene.scene.add(box);
       window._collisionHighlights.push(box);
     });
-    console.log(`Highlighted ${window._collisionHighlights.length} collision objects in green`);
+    console.log(
+      `Highlighted ${window._collisionHighlights.length} collision objects in green`
+    );
   };
   window.clearHighlights = () => {
     if (window._collisionHighlights) {
-      window._collisionHighlights.forEach(h => lobbyScene.scene.remove(h));
+      window._collisionHighlights.forEach((h) => lobbyScene.scene.remove(h));
       window._collisionHighlights = [];
       console.log("Cleared highlights");
     }
@@ -333,9 +349,17 @@ async function init() {
 
       if (distSq < minDistSq) {
         const dist = Math.sqrt(distSq);
-        console.log(`COLLISION ${i}: ${cached.mesh.name || 'unnamed'}`);
-        console.log(`  Object pos: (${cached.position.x.toFixed(2)}, ${cached.position.z.toFixed(2)})`);
-        console.log(`  Distance: ${dist.toFixed(2)}, Min: ${minDist.toFixed(2)}, Radius: ${cached.radius.toFixed(2)}`);
+        console.log(`COLLISION ${i}: ${cached.mesh.name || "unnamed"}`);
+        console.log(
+          `  Object pos: (${cached.position.x.toFixed(
+            2
+          )}, ${cached.position.z.toFixed(2)})`
+        );
+        console.log(
+          `  Distance: ${dist.toFixed(2)}, Min: ${minDist.toFixed(
+            2
+          )}, Radius: ${cached.radius.toFixed(2)}`
+        );
         collisionCount++;
       }
     });
@@ -345,7 +369,13 @@ async function init() {
     console.log("=== COLLISION DEBUG ===");
     console.log(`Total objects: ${lobbyScene.physics.boundingBoxes.length}`);
     lobbyScene.physics.boundingBoxes.forEach((cached, i) => {
-      console.log(`${i}: ${cached.mesh.name || 'unnamed'} - pos: (${cached.position.x.toFixed(2)}, ${cached.position.z.toFixed(2)}), radius: ${cached.radius.toFixed(2)}`);
+      console.log(
+        `${i}: ${
+          cached.mesh.name || "unnamed"
+        } - pos: (${cached.position.x.toFixed(2)}, ${cached.position.z.toFixed(
+          2
+        )}), radius: ${cached.radius.toFixed(2)}`
+      );
     });
   };
 }

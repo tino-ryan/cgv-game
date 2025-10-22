@@ -16,7 +16,7 @@ export default class Player {
     this.combatMode = false;
     this.gunEquipped = false;
     this.health = new Health(5); // 5 hearts
-    this._isDead = false; 
+    this._isDead = false;
 
     this.cameraOffset = new THREE.Vector3(0, 1.5, 5);
     this.hoverHeight = 1.5;
@@ -49,13 +49,42 @@ export default class Player {
       console.log("Loading ghost model from:", url);
       const loader = new GLTFLoader();
       const gltf = await loader.loadAsync(url);
+
       this.ghost = gltf.scene;
-      //this.ghost.position.y = this.hoverHeight;
+      this.ghost.scale.set(1, 1, 1);
       this.ghost.position.set(10, this.hoverHeight, 0);
+      this.ghost.rotation.y = Math.PI; // face forward
+
+      // Fix lighting + enable shadows
+      this.ghost.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          child.frustumCulled = false;
+
+          // Make sure materials render properly
+          if (child.material) {
+            child.material.side = THREE.FrontSide;
+            child.material.needsUpdate = true;
+            child.material.roughness = 0.8;
+            child.material.metalness = 0.1;
+
+            // optional: ensure color space consistency
+            child.material.toneMapped = true;
+            child.material.envMapIntensity = 0.8;
+          }
+
+          // ensure geometry bounds
+          if (!child.geometry.boundingSphere)
+            child.geometry.computeBoundingSphere();
+          if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+        }
+      });
+
       this.scene.add(this.ghost);
-      console.log("Ghost loaded successfully");
+      console.log("✅ Ghost model loaded and configured!");
     } catch (error) {
-      console.error("Failed to load ghost model:", error);
+      console.error("❌ Failed to load ghost model:", error);
     }
   }
 
@@ -104,7 +133,7 @@ export default class Player {
     if (this.crosshair) {
       this.crosshair.style.display = "block";
     }
-    
+
     if (this.gun) {
       this.camera.add(this.gun);
       this.gun.position.set(0.5, -0.5, -1);
@@ -116,23 +145,23 @@ export default class Player {
     if (this.shootHandler) {
       window.removeEventListener("mousedown", this.shootHandler);
     }
-    
+
     this.shootHandler = (event) => {
       if (this.combatMode && event.button === 0) {
         this.shoot();
       }
     };
-    
+
     window.addEventListener("mousedown", this.shootHandler);
   }
 
   exitCombat() {
     this.combatMode = false;
-    
+
     if (this.crosshair) {
       this.crosshair.style.display = "none";
     }
-    
+
     if (this.gun) {
       this.camera.remove(this.gun);
       this.gun.visible = false;
@@ -151,7 +180,7 @@ export default class Player {
       this.ghost.position.y = this.hoverHeight;
     }
   }
-shoot() {
+  shoot() {
     if (!this.canShoot || !this.gun) return;
     this.canShoot = false;
     setTimeout(() => (this.canShoot = true), this.shootCooldown * 1000);
@@ -165,12 +194,14 @@ shoot() {
     this.raycaster.set(gunPosition, direction);
 
     // Check for both enemies AND boss
-    const enemies = this.scene.children.filter(obj => obj.userData.isEnemy || obj.userData.isBoss);
+    const enemies = this.scene.children.filter(
+      (obj) => obj.userData.isEnemy || obj.userData.isBoss
+    );
     const intersects = this.raycaster.intersectObjects(enemies, true);
 
     let tracerEnd = new THREE.Vector3();
     let hitBoss = false;
-    
+
     if (intersects.length > 0) {
       const hit = intersects[0].object;
       const hitPosition = intersects[0].point.clone();
@@ -185,11 +216,11 @@ shoot() {
       if (bossObject && bossObject.userData.isBoss) {
         hitBoss = true;
         console.log("🎯 Boss hit!");
-        
+
         // Find the boss instance and damage it
         if (this.scene.userData.boss) {
           this.scene.userData.boss.takeDamage(10);
-          
+
           // Show hit marker
           if (this.scene.userData.lobbyScene) {
             this.scene.userData.lobbyScene.showHitMarker();
@@ -215,11 +246,11 @@ shoot() {
 
     const geometry = new THREE.BufferGeometry().setFromPoints([
       gunPosition.clone(),
-      tracerEnd
+      tracerEnd,
     ]);
     const line = new THREE.Line(geometry, this.tracerMaterial);
     this.scene.add(line);
-    
+
     setTimeout(() => {
       this.scene.remove(line);
       geometry.dispose();
@@ -228,14 +259,14 @@ shoot() {
   takeDamage(amount = 1) {
     // Guard against multiple damage calls when already dead
     if (this.health.current <= 0) return;
-    
+
     this.health.takeDamage(amount);
     console.log(`Player HP: ${this.health.current}/${this.health.max}`);
-    
+
     if (this.hud) {
       this.hud.updatePlayerHearts(this.health.current, this.health.max);
     }
-    
+
     // Check death AFTER updating UI
     if (this.health.current <= 0) {
       this.health.current = 0; // Ensure it's exactly 0
@@ -243,16 +274,15 @@ shoot() {
     }
   }
 
+  onDeath() {
+    // Only trigger death once
+    if (this._isDead) return;
+    this._isDead = true;
 
-onDeath() {
-  // Only trigger death once
-  if (this._isDead) return;
-  this._isDead = true;
-  
-  console.log("💀 Player defeated!");
-  // Trigger game over through the scene
-  if (window.lobbyScene) {
-    window.lobbyScene.handlePlayerDefeat();
+    console.log("💀 Player defeated!");
+    // Trigger game over through the scene
+    if (window.lobbyScene) {
+      window.lobbyScene.handlePlayerDefeat();
+    }
   }
-}
 }
