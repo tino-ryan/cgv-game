@@ -227,10 +227,10 @@ export default class BellboyBoss {
       // Scale the projectile appropriately
       // Different sizes for different items (adjust as needed)
       const scales = [
-        0.4,  // soap - smaller
-        0.5,  // sponge - medium
-        0.6,  // feather duster - bigger (it's long)
-        0.7,  // bucket - bigger
+        0.2,  // soap - smaller
+        2,  // sponge - medium
+        2,  // feather duster - bigger (it's long)
+        2,  // bucket - bigger
         0.5   // bleach bottle - medium
       ];
       
