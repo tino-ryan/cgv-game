@@ -25,7 +25,7 @@ export default class TitleMenu {
       zIndex: 1000,
     });
 const title = document.createElement("h1");
-    title.textContent = "THE BOX";
+    title.textContent = "Cozy ghost hotel";
     title.style.marginBottom = "20px";
 
     const startButton = document.createElement("button");
