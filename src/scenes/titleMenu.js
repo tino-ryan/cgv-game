@@ -19,6 +19,7 @@ export default class TitleMenu {
       alignItems: "center",
       zIndex: "2000",
       color: "white",
+      fontFamily: "sans-serif",
     });
 
     // 👻 Replace text title with PNG logo
