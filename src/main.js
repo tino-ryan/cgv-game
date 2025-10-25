@@ -3,8 +3,10 @@ import { initRenderer } from "./core/renderer.js";
 import LobbyScene from "./scenes/lobbyScene.js";
 import CutsceneManager from "./systems/cutsceneManager.js";
 import { tutorialCutscene } from "./cutscenes/tutorialCutscene.js";
+import SceneManager from "./systems/sceneManager.js";
+import TitleMenu from "./scenes/titleMenu.js";
 
-let renderer, camera, lobbyScene;
+let renderer, camera, lobbyScene, sceneManager;
 const mouseSensitivity = 0.002;
 
 let yaw = 0;
@@ -25,6 +27,12 @@ async function init() {
     1000
   );
   camera.position.set(0, 2, 5);
+
+  sceneManager = new SceneManager(renderer, camera);
+
+  const titleMenu = new TitleMenu(sceneManager);
+  sceneManager.setScene(null);
+
 
   // Set up camera hierarchy for rotation
   yawObject.add(pitchObject);
@@ -193,6 +201,11 @@ async function init() {
   // Main game loop
   function animate() {
     requestAnimationFrame(animate);
+
+    if (sceneManager.currentScene) {
+      sceneManager.update();
+      renderer.render(sceneManager.currentScene.scene, camera);
+    }
 
     if (!lobbyScene.player.ghost) {
       lobbyScene.update();
