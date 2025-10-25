@@ -5,8 +5,11 @@ import CutsceneManager from "./systems/cutsceneManager.js";
 import { tutorialCutscene } from "./cutscenes/tutorialCutscene.js";
 import SceneManager from "./systems/sceneManager.js";
 import TitleMenu from "./scenes/titleMenu.js";
+import PauseMenu from "./ui/pauseMenu.js";
 
 let renderer, camera, lobbyScene, sceneManager;
+let isPaused = false;
+let pauseMenu;
 const mouseSensitivity = 0.002;
 
 let yaw = 0;
@@ -201,6 +204,7 @@ async function init() {
   // Main game loop
   function animate() {
     requestAnimationFrame(animate);
+    if (isPaused) return;
 
     if (sceneManager.currentScene) {
       sceneManager.update();
@@ -282,6 +286,10 @@ async function init() {
     // FIXED: Pass the actual yaw and pitch values to the scene
     lobbyScene.updateWithCameraRotation(yaw, pitch);
   }
+
+  pauseMenu = new PauseMenu(sceneManager, lobbyScene, (paused) => {
+    isPaused = paused;
+  });
 
   animate();
 
