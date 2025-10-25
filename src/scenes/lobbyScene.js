@@ -9,6 +9,8 @@ import RoomTransformation from "../systems/roomTransformation.js";
 import CutsceneManager from "../systems/cutsceneManager.js";
 import { postLobbyCutscene } from "../cutscenes/postLobbyCutscene.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import PauseMenu from "../systems/pauseMenu.js";
+
 
 export default class LobbyScene {
   constructor(renderer, camera) {
@@ -60,6 +62,27 @@ export default class LobbyScene {
 
     // Game state
     this.gameOver = false;
+    this.isPaused = false;
+
+    this.pauseMenu = new PauseMenu(this.sceneManager, () => {
+      this.isPaused = false; // unpause when resuming
+    });
+
+    const pauseButton = document.createElement("button");
+    pauseButton.id = "pause-button";
+    pauseButton.textContent = "Pause";
+    pauseButton.style.position = "absolute";
+    pauseButton.style.top = "20px";
+    pauseButton.style.right = "20px";
+    pauseButton.style.zIndex = "50";
+    pauseButton.onclick = () => {
+      this.isPaused = true;
+      this.pauseMenu.show();
+    };
+
+    document.body.appendChild(pauseButton);
+
+
   }
 
   async loadTutorialOrbModels() {
@@ -384,6 +407,8 @@ export default class LobbyScene {
   }
 
   updateWithCameraRotation(yaw, pitch) {
+    if (this.isPaused) return;
+
     const delta = this.clock.getDelta();
     const time = this.clock.elapsedTime;
 
@@ -434,7 +459,11 @@ export default class LobbyScene {
       this.checkBellPickup();
     }
 
+    try {
     this.renderer.render(this.scene, this.camera);
+  } catch (e) {
+    console.warn("Render skipped (scene or camera undefined):", e);
+  }
   }
 
   update() {
@@ -743,4 +772,16 @@ export default class LobbyScene {
     }
     return null;
   }
+
+  returnToTitle() {
+  console.log("Returning to title screen...");
+
+  // Optional: stop any ongoing updates or loops
+  this.paused = true;
+
+  // For now, just reload the page to simulate returning to title
+  // Later, you’ll replace this with an actual scene switch
+  window.location.reload();
+}
+
 }
