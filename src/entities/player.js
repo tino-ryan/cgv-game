@@ -1,3 +1,4 @@
+//src/entities/player.js - COMPLETE FIXED VERSION
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { loadAssets } from "../core/loader.js";
@@ -7,11 +8,11 @@ export default class Player {
   constructor(scene, camera, hud) {
     this.scene = scene;
     this.camera = camera;
-    this.hud = hud; // HUD reference for updating hearts
+    this.hud = hud;
 
     this.ghost = null;
     this.gun = null;
-    this.tutorial = null; // Reference to tutorial
+    this.tutorial = null;
 
     this.combatMode = false;
     this.gunEquipped = false;
@@ -27,14 +28,12 @@ export default class Player {
     }
 
     this.raycaster = new THREE.Raycaster();
-
     this.canShoot = true;
-    this.shootCooldown = 0.3;
+    this.shootCooldown = 300; // milliseconds
 
-    this.tracerDuration = 0.1;
+    this.tracerDuration = 100; // milliseconds
     this.tracerMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
 
-    // Initialize HUD hearts
     if (this.hud) {
       this.hud.updatePlayerHearts(this.health.current, this.health.max);
     }
@@ -50,7 +49,6 @@ export default class Player {
       const loader = new GLTFLoader();
       const gltf = await loader.loadAsync(url);
       this.ghost = gltf.scene;
-      //this.ghost.position.y = this.hoverHeight;
       this.ghost.position.set(10, this.hoverHeight, 0);
       this.scene.add(this.ghost);
       console.log("Ghost loaded successfully");
@@ -151,58 +149,96 @@ export default class Player {
       this.ghost.position.y = this.hoverHeight;
     }
   }
-shoot() {
-    if (!this.canShoot || !this.gun) return;
-    this.canShoot = false;
-    setTimeout(() => (this.canShoot = true), this.shootCooldown * 1000);
 
+  shoot() {
+    if (!this.canShoot) return;
+    this.canShoot = false;
+
+    setTimeout(() => {
+      this.canShoot = true;
+    }, this.shootCooldown);
+
+    // Get gun position - FIXED to match original method
     const gunPosition = new THREE.Vector3();
     this.gun.getWorldPosition(gunPosition);
 
+    // Get camera direction
     const direction = new THREE.Vector3();
     this.camera.getWorldDirection(direction);
 
+    // Setup raycaster
     this.raycaster.set(gunPosition, direction);
+    this.raycaster.far = 100;
 
-    // Check for both enemies AND boss
-    const enemies = this.scene.children.filter(obj => obj.userData.isEnemy || obj.userData.isBoss);
-    const intersects = this.raycaster.intersectObjects(enemies, true);
+    // Collect all potential targets
+    let targets = [];
+    
+    // Add lobby boss if it exists
+    if (window.lobbyScene?.boss?.mesh) {
+      targets.push(window.lobbyScene.boss.mesh);
+    }
+    
+    // Add bathroom boss if it exists
+    if (window.bathroomScene?.boss?.mesh) {
+      targets.push(window.bathroomScene.boss.mesh);
+    }
+    
+    // Add tutorial objects if in tutorial
+    if (this.tutorial?.disguisedObjects) {
+      targets = targets.concat(this.tutorial.disguisedObjects);
+    }
+
+    // Raycast against all targets (recursive to hit child meshes)
+    const intersects = this.raycaster.intersectObjects(targets, true);
 
     let tracerEnd = new THREE.Vector3();
-    let hitBoss = false;
-    
+    let hitSomething = false;
+
     if (intersects.length > 0) {
-      const hit = intersects[0].object;
+      const hit = intersects[0];
       const hitPosition = intersects[0].point.clone();
       tracerEnd.copy(hitPosition);
+      hitSomething = true;
 
-      // Check if we hit the boss (check the hit object or its parent)
-      let bossObject = hit;
-      while (bossObject && !bossObject.userData.isBoss) {
-        bossObject = bossObject.parent;
+      // Find the actual target by traversing up
+      let targetObject = hit.object;
+      while (targetObject.parent && !targetObject.userData.isBoss && !targetObject.userData.isEnemy && !targetObject.userData.isSuspicious) {
+        targetObject = targetObject.parent;
       }
 
-      if (bossObject && bossObject.userData.isBoss) {
-        hitBoss = true;
+      // Handle different target types
+      if (targetObject.userData.isBoss) {
         console.log("🎯 Boss hit!");
         
-        // Find the boss instance and damage it
-        if (this.scene.userData.boss) {
-          this.scene.userData.boss.takeDamage(10);
-          
-          // Show hit marker
-          if (this.scene.userData.lobbyScene) {
-            this.scene.userData.lobbyScene.showHitMarker();
+        // Handle lobby boss
+        if (window.lobbyScene?.boss && targetObject === window.lobbyScene.boss.mesh) {
+          window.lobbyScene.boss.takeDamage(10);
+          if (window.lobbyScene.showHitMarker) {
+            window.lobbyScene.showHitMarker();
           }
         }
-      } else {
-        // Regular enemy hit (tutorial objects)
-        this.scene.remove(hit);
-        if (hit.geometry) hit.geometry.dispose();
-        if (hit.material) hit.material.dispose();
+        
+        // Handle bathroom boss
+        if (window.bathroomScene?.boss && targetObject === window.bathroomScene.boss.mesh) {
+          window.bathroomScene.boss.takeDamage(10);
+          if (window.bathroomScene.showHitMarker) {
+            window.bathroomScene.showHitMarker();
+          }
+        }
+      } 
+      else if (targetObject.userData.isEnemy || targetObject.userData.isSuspicious) {
+        console.log("💀 Tutorial object hit!");
+        
+        // Remove from scene
+        this.scene.remove(targetObject);
+        
+        // Dispose of resources
+        if (targetObject.geometry) targetObject.geometry.dispose();
+        if (targetObject.material) targetObject.material.dispose();
 
+        // Remove from tutorial array and notify
         if (this.tutorial) {
-          const idx = this.tutorial.disguisedObjects.indexOf(hit);
+          const idx = this.tutorial.disguisedObjects.indexOf(targetObject);
           if (idx !== -1) {
             this.tutorial.disguisedObjects.splice(idx, 1);
           }
@@ -210,49 +246,58 @@ shoot() {
         }
       }
     } else {
+      // No hit - tracer goes far
       tracerEnd.copy(gunPosition).add(direction.clone().multiplyScalar(50));
     }
 
+    // Create visual tracer - FIXED to match original
     const geometry = new THREE.BufferGeometry().setFromPoints([
       gunPosition.clone(),
       tracerEnd
     ]);
+    
     const line = new THREE.Line(geometry, this.tracerMaterial);
     this.scene.add(line);
     
     setTimeout(() => {
       this.scene.remove(line);
       geometry.dispose();
-    }, this.tracerDuration * 1000);
+    }, this.tracerDuration);
+
+    console.log("🔫 Shot fired!", hitSomething ? "HIT!" : "MISS");
   }
+
   takeDamage(amount = 1) {
-    // Guard against multiple damage calls when already dead
-    if (this.health.current <= 0) return;
+    // Guard against damage when already dead
+    if (this.health.current <= 0 || this._isDead) return;
     
     this.health.takeDamage(amount);
     console.log(`Player HP: ${this.health.current}/${this.health.max}`);
     
+    // Update HUD
     if (this.hud) {
       this.hud.updatePlayerHearts(this.health.current, this.health.max);
     }
     
-    // Check death AFTER updating UI
+    // Check for death
     if (this.health.current <= 0) {
-      this.health.current = 0; // Ensure it's exactly 0
+      this.health.current = 0;
       this.onDeath();
     }
   }
 
-
-onDeath() {
-  // Only trigger death once
-  if (this._isDead) return;
-  this._isDead = true;
-  
-  console.log("💀 Player defeated!");
-  // Trigger game over through the scene
-  if (window.lobbyScene) {
-    window.lobbyScene.handlePlayerDefeat();
+  onDeath() {
+    // Only trigger death once
+    if (this._isDead) return;
+    this._isDead = true;
+    
+    console.log("💀 Player defeated!");
+    
+    // Trigger game over through appropriate scene
+    if (window.lobbyScene?.handlePlayerDefeat) {
+      window.lobbyScene.handlePlayerDefeat();
+    } else if (window.bathroomScene?.handlePlayerDefeat) {
+      window.bathroomScene.handlePlayerDefeat();
+    }
   }
-}
 }

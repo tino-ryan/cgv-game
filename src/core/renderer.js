@@ -1,3 +1,4 @@
+//src/core/renderer.js
 import * as THREE from 'three';
 
 export function initRenderer() {

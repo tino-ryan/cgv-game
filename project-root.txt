@@ -24,7 +24,7 @@ project-root/
 │   ├── entities/
 │   │   ├── bellboyboss.js
 │   │   ├── npc.js
-│   │   └── player.js
+│   │   └── player.js , health.js , bellboyboss.js
 │   │
 │   ├── scene/
 │   │   ├── lobbyscene.js
@@ -33,7 +33,7 @@ project-root/
 │   │
 │   ├── systems/
 │   │   ├── audio.js
-│   │   └── physics.js
+│   │   └── physics.js ,custscene manager.js, inventory.js, roomtransformation.js, tutorial.js
 │   │
 │   ├── ui/
 │   │   ├── hud.js
@@ -45,3 +45,370 @@ project-root/
 ├── vite.config.js
 ├── package.json
 └── .gitignore
+
+# Cozy Ghost Hotel - Comprehensive Project Documentation
+
+**Project: Cozy Ghost Hotel (Three.js Game)**  
+**Documentation Version: 1.0**  
+**Date: October 25, 2025**  
+**Author: Grok (Assistant Dev)**  
+
+This Markdown file compiles the full documentation for the Cozy Ghost Hotel project, based on the provided code snippets and file structure. It includes an overview of the project architecture, followed by detailed breakdowns of key files: `main.js`, `tutorial.js`, `lobbyScene.js`, `player.js`, and `health.js`. This ensures consistency for ongoing development.
+
+To download this as an MD file:
+- Copy the entire content below.
+- Paste into a new file named `full-project-documentation.md`.
+- Save it with a text editor (e.g., VS Code, Notepad).
+
+---
+
+## Project Overview
+- **Game Concept (Inferred)**: A 3D ghost-themed hotel game where the player is a ghost entity. Features include exploration (lobby, hallways), combat (shooting suspicious objects to free spirits), inventory (e.g., picking up a bell), tutorials, cutscenes, and boss fights. It's built with Three.js for 3D rendering, with physics for collisions, audio, and UI elements.
+- **Tech Stack**: Three.js (core 3D library), Vite (from `vite.config.js` for bundling), likely GLTF models for assets.
+- **Key Features Implemented**:
+  - First-person and third-person camera controls with pointer lock.
+  - Movement with collision detection.
+  - Tutorial phases teaching looking, moving, and combat.
+  - Scene transitions (e.g., lobby to hallway).
+  - Basic inventory and item interaction (e.g., bell pickup).
+  - Combat mode for shooting.
+- **Assumptions for Consistency**: The game progresses through levels (lobby → hallway/level2 → level3). Entities like NPCs and bosses interact with the player. Systems like physics and inventory are modular for reuse across scenes.
+
+## Architecture and File Structure
+The project follows a modular Entity-Component-System (ECS)-like pattern, common in Three.js games:
+- **public/**: Static assets.
+  - Models (GLTF/GLB with textures and binaries for scenes/objects like guns).
+  - Textures (e.g., grass.jpg for environments).
+- **styles/**: Global CSS for UI/HUD styling.
+- **src/**: Main code.
+  - **core/**: foundational utilities.
+    - `loader.js`: Likely handles asset loading (e.g., GLTF models).
+    - `loop.js`: Possibly manages the animation loop (though `main.js` has a custom `animate()`).
+    - `renderer.js`: Initializes the Three.js renderer (WebGL).
+    - `scene.js`: Base scene setup.
+  - **entities/**: Game objects with behaviors.
+    - `bellboyboss.js`: Likely the boss entity (e.g., for lobby boss fight).
+    - `npc.js`: Non-player characters (guests or hotel staff?).
+    - `player.js`: Player entity (ghost with position, combat mode, inventory).
+  - **scene/**: Level-specific logic (extends a base scene?).
+    - `lobbyscene.js`: Starting area with bell pickup, tutorial, boss fight.
+    - `level2scene.js`: Possibly the hallway (from code: `HallwayScene`).
+    - `level3scene.js`: Next level (unimplemented in provided code).
+  - **systems/**: Reusable game systems.
+    - `audio.js`: Sound effects/music.
+    - `physics.js`: Collision detection (e.g., `getSafeMovement()`, bounding boxes).
+    - `cutscene manager.js`: Manages cutscenes (e.g., tutorial dialog/videos).
+    - `inventory.js`: Handles items (e.g., selecting/using bell).
+    - `roomtransformation.js`: Possibly dynamic room changes (e.g., ghost effects).
+    - `tutorial.js`: Guided onboarding (detailed below).
+  - **ui/**: User interface.
+    - `hud.js`: Heads-up display (messages, progress).
+    - `menu.js`: Pause/main menu.
+  - `main.js`: Entry point (initializes everything, handles global events).
+- **Root Files**:
+  - `index.html`: HTML entry (renders the canvas).
+  - `vite.config.js`: Build config.
+  - `package.json`: Dependencies (includes Three.js).
+  - `.gitignore`: Standard ignores.
+
+This structure promotes modularity: Scenes compose entities and systems, core handles rendering/loops.
+
+## Detailed File Breakdowns
+
+### src/main.js
+This file serves as the entry point for the entire game. It initializes core Three.js components (renderer, camera), sets up global event listeners for input/controls, manages the animation loop, handles scene transitions, and provides debug utilities via window functions. It coordinates between scenes, player movement, and systems like cutscenes.
+
+#### Script Structure
+- **Imports**: Three.js, renderer init from core, specific scenes (LobbyScene, HallwayScene), CutsceneManager, and a tutorial cutscene.
+- **Global Variables**:
+  - `renderer`, `camera`: Core Three.js objects.
+  - `currentScene`, `lobbyScene`, `hallwayScene`: Track active/loaded scenes.
+  - `mouseSensitivity`: For camera rotation (0.002).
+  - `yaw`, `pitch`: Camera angles.
+  - `yawObject`, `pitchObject`: THREE.Object3D hierarchy for camera rotation (yaw adds pitch, pitch adds camera).
+- **No Class**: Pure script with `init()` async function and global listeners.
+
+#### Initialization Flow (`init()`)
+1. **Renderer/Camera Setup**: Calls `initRenderer()` (from core/renderer.js), creates PerspectiveCamera (FOV 75, near 0.1, far 1000), positions at (0,2,5).
+2. **Camera Hierarchy**: Adds camera to pitchObject, pitch to yawObject.
+3. **Cutscene Container**: Creates/appends a full-screen DIV for cutscenes (black background, centered text).
+4. **Cutscene Play**: Instantiates CutsceneManager, plays `tutorialCutscene` async.
+5. **Scene Init**: Creates LobbyScene, adds yawObject to its scene, sets as currentScene.
+6. **Event Listeners**:
+   - Double-click: Requests pointer lock for mouse look.
+   - Pointerlockchange: Logs lock status.
+   - Keydown (ESC): Exits pointer lock.
+   - Mousemove: If locked, updates yaw/pitch (clamped to -PI/2 to PI/2 for pitch).
+   - Keydown/keyup: Tracks movement keys (WASD/Arrows), F for bell pickup (if in lobby), E for selected item use.
+7. **Animation Loop**: Calls `animate()` via requestAnimationFrame.
+8. **Debug Window Functions**: Exposes combat toggles, boss start, collision debug tools (toggle, list, raycast test, highlight, etc.).
+9. **Resize Listener**: Updates camera aspect and renderer size on window resize.
+10. **Transition Function**: `window.transitionToHallway()` creates HallwayScene (passing player), adds yawObject, sets as currentScene, repositions player.
+
+#### Key Functions and How They Work
+- **init()**: Async setup as described. Catches errors.
+- **animate()**:
+  - Recursive via RAF.
+  - If no player ghost: Just calls scene.update().
+  - Gets snap rotation from scene (if any, applies to yaw/pitch).
+  - Calculates forward/right vectors:
+    - Lobby: First-person, based on yaw (combat inverts forward).
+    - Hallway: Third-person, similar but separate.
+  - Movement: Normalizes vector from keys, gets safe movement via physics (`getSafeMovement()` with speed 0.1), adds to player position.
+  - Rotates ghost based on movement direction (unless combat).
+  - Calls `currentScene.updateWithCameraRotation(yaw, pitch)`.
+- **Key Handling**: In keydown/keyup listeners, updates keys object and triggers actions like pickup/use.
+- **Debug Tools**:
+  - `toggleCollisionDebug()`: Toggles physics debug visuals.
+  - `listCollisionObjects()`: Logs count and details of collision objects.
+  - `testRaycast()`: Raycasts from player, logs hits.
+  - `highlightCollisionObjects()`: Adds green BoxHelpers to collisions.
+  - `clearHighlights()`: Removes helpers.
+  - `showPlayerBox()`: Logs player pos/radius, checks/detects collisions.
+  - `debugCollisions()`: Logs all bounding boxes.
+
+#### Interactions
+- **With Scenes**: Switches `currentScene`, passes renderer/camera/player.
+- **With Player**: Accesses via `currentScene.player`, updates position/rotation.
+- **With Physics**: Uses `getSafeMovement()` for collision-aware movement.
+- **With Cutscenes**: Plays intro tutorial cutscene before scene init.
+- **Global**: Exposes functions on window for console/debug use.
+
+#### Potential Issues/Notes
+- Async init can fail if cutscene or scene load errors.
+- Pointer lock required for mouse look; mobile may need alternatives.
+- Movement assumes physics in scenes; hallway uses third-person.
+
+### src/systems/tutorial.js
+This file defines the `Tutorial` class, a guided onboarding system that teaches core mechanics (looking, moving, combat) through phased challenges. It spawns interactive objects (orbs, boxes), tracks progress with UI elements, and integrates with player/HUD/scene for updates and completion (triggers boss fight).
+
+#### Class Structure
+- **Constructor Parameters**: `hud` (HUD for messages), `lobbyScene` (for boss trigger), `player` (for position checks).
+- **Key Properties**:
+  - `phase`: Current tutorial step (starts at 0).
+  - `marker`: Single orb for first move.
+  - `subgoalsUI`, `progressBar/Fill`: DOM elements for movement/spirit UI.
+  - Look Phase: `initialYaw/Pitch`, `cameraMovementDetected/Threshold`.
+  - Movement Training: `movementProgress` (object tracking directions), `movementOrbs` (array of spheres).
+  - Spirit Release: `disguisedObjects` (array of boxes), `spiritsFreed/totalSpirits` (0/5).
+  - `phases`: Array of objects defining steps (look, firstMove, movementTraining, spiritRelease).
+
+#### Initialization Flow
+- Sets up properties, defines phases.
+- **start(yaw, pitch)**: Saves initial rotation, shows welcome, delays instruction message, calls `executePhase()`.
+
+#### Key Methods and How They Work
+- **executePhase()**: If done, calls `complete()`. Else, switches on phase type:
+  - "look": Nothing (handled in update).
+  - "firstMove": Spawns cyan orb near player (clamped to room), shows message.
+  - "movementTraining": Calls `startMovementTraining()` (shows message, creates UI/progress bar, spawns 4 yellow orbs relative to player, clamped).
+  - "spiritRelease": Calls `startSpiritRelease()` (enters combat, shows message/UI, spawns 5 colored boxes near player, clamped higher up).
+- **createOrb(pos, color)**: Creates glowing sphere mesh.
+- **spawnMarker(pos, color)**: Wrapper for orb creation, adjusts pos for first move.
+- **createSubgoalsUI() / createProgressBar()**: DOM DIVs for movement tips/progress (CSS styled).
+- **updateProgressBar()**: Sets fill width based on completed directions (4 total).
+- **removeProgressBar() / removeSubgoalsUI()**: Removes DOM elements.
+- **createSpiritUI() / updateSpiritUI()**: DOM DIV for spirit count/tip.
+- **showFloatingText(text, pos)**: Creates fading/upward text DIV at screen center.
+- **releaseSpirit(pos)**: Calls reward particles, increments freed, updates UI, shows "+1 Spirit!". If all freed: Removes UI, shows complete message, delays boss start via lobbyScene.
+- **update(keys, player, yaw, pitch, delta)**: Called in scene loop.
+  - Animates markers/orbs/boxes (rotation, scale pulse).
+  - Switches on phase: Updates look (delta check), marker distance, movement orb collection (updates progress), spirit (handled by shoot).
+- **updateLookingPhase(yaw, pitch)**: If delta > threshold, detects movement, shows message, advances phase.
+- **updateMarkerPhase(player)**: If distance <2, rewards, removes, advances.
+- **updateMovementTraining(player)**: Checks orb distances, marks direction complete, rewards/removes, updates bar. If all done, removes UI, advances.
+- **rewardEffect(pos, color)**: Spawns 20 particle spheres, animates upward/random, removes after.
+- **showMessage(msg)**: Delegates to HUD.
+- **complete()**: Clears message.
+
+#### Interactions
+- **With Player**: Checks position, enters combat for spirits, calls onDeath indirectly.
+- **With HUD**: Shows messages, but uses own DOM for progress/UI.
+- **With Scene**: Adds/removes orbs/boxes, calls startBossFight on complete.
+- **With Main.js**: Updated via scene loop with yaw/pitch.
+
+#### Potential Issues/Notes
+- Positions clamped to approximate lobby bounds; adjust if model changes.
+- UI is DOM-based; ensure no overlaps with other elements.
+- Spirit hits handled in player.shoot(); assumes isSuspicious flag.
+
+### src/scenes/lobbyScene.js
+This file defines the `LobbyScene` class, which represents the starting level (lobby) of the game. It's responsible for setting up the 3D environment, initializing core entities (player, tutorial, boss), handling game logic like boss fights, item pickups (e.g., service bell), and scene transitions. It extends the base scene pattern and integrates systems like physics, inventory, HUD, and cutscenes.
+
+#### Class Structure
+- **Constructor Parameters**: `renderer` (Three.js WebGLRenderer), `camera` (PerspectiveCamera).
+- **Key Properties**:
+  - `scene`: The Three.js Scene object for the lobby.
+  - `clock`: THREE.Clock for delta time calculations.
+  - `physics`: Instance of `PhysicsSystem` for collision handling.
+  - `inventory`: Instance of `Inventory` (passed null, likely a placeholder for UI).
+  - `roomTransformer`: Instance of `RoomTransformation` for dynamic room changes.
+  - `lobbyModel`: Loaded GLTF model for the lobby environment.
+  - `hud`: Instance of `HUD` for displaying messages and health bars.
+  - `player`: Instance of `Player` entity.
+  - `tutorial`: Instance of `Tutorial` system, tied to HUD, scene, and player.
+  - `boss`: Instance of `BellboyBoss` (initialized later in boss fight).
+  - `serviceBell`: Pickup item (GLTF model or fallback geometry).
+  - `gameOver`: Flag to prevent updates during game over state.
+
+#### Initialization Flow
+1. **Scene Setup**: Creates a new THREE.Scene, adds ambient and directional lights.
+2. **Load Environment**: Calls `loadLobbyEnvironment()` to asynchronously load `/assets/models/lobby.glb` using GLTFLoader. Scales it, adds to scene, and registers with physics for collisions.
+3. **Player Setup**: Creates `Player`, loads ghost model (`/public/assets/models/scene.gltf`) and gun (`/public/assets/models/gun.glb`).
+4. **Tutorial Start**: Initializes and starts the tutorial with initial camera rotation.
+5. **Boss**: Not initialized until `startBossFight()` is called (e.g., by tutorial completion).
+
+#### Key Methods and How They Work
+- **loadLobbyEnvironment()**: Async GLTF load. On success, positions/scales the model, adds to scene, and passes to physics (`addCollisionObject()` with recursive=true for child meshes). Logs collision object count.
+- **startBossFight()**: 
+  - Enters player combat mode.
+  - Creates `BellboyBoss` with scene, player, HUD, physics.
+  - Snaps camera to boss via `snapCameraToBoss()` (calculates yaw/pitch based on positions).
+  - Creates boss health bar via HUD (`createHealthBar()`).
+  - Shows message.
+- **updateBossHealth()**: Updates health bar width based on boss health percentage. Shows chase message if boss is chasing.
+- **checkPlayerHit()**: Iterates boss projectiles, checks distance to player (<1.0). On hit: Removes projectile, damages player, flashes red overlay. Skips if game over or player dead.
+- **handlePlayerDefeat()**: Sets gameOver, cleans up boss/projectiles/health bar, exits pointer lock, shows game over screen after delay.
+- **showGameOverScreen()**: Creates overlay DIV with "GAME OVER" title, subtitle, and restart button. Button calls `restartGame()`.
+- **restartGame()**: Removes overlay, resets player health/dead flag, restarts boss fight.
+- **showHitMarker()**: Creates temporary "X" DIV at screen center for hit feedback, fades out.
+- **updateWithCameraRotation(yaw, pitch)**: Main update loop (called by main.js animate).
+  - Gets delta time.
+  - Updates player.
+  - If tutorial active: Calls tutorial update.
+  - If boss alive: Updates boss, checks projectiles for player hits.
+  - If boss defeated: Calls `handleBossDefeat()`.
+  - If serviceBell: Animates float/rotation, checks pickup distance.
+  - Renders scene.
+- **update()**: Wrapper for `updateWithCameraRotation(0,0)` (non-rotating update).
+- **handleBossDefeat()**: Shows victory message, exits combat, removes health bar. Plays post-lobby cutscene (if container exists), drops service bell, shows pickup message.
+- **dropServiceBell(position)**: Async loads bell model (`/assets/models/worn_service_ring_bell.glb`), positions/scales, adds to scene with pickup data. Fallback to cylinder if load fails.
+- **checkBellPickup()**: Checks distance to player (<2.0), shows/hides "Press F" prompt DIV.
+- **pickupBell()**: Removes bell from scene, creates inventory item with icon (generated via offscreen render), adds to inventory, shows message.
+- **generateBellIcon()**: Creates temporary renderer/scene/camera, clones bell, renders to data URL for icon.
+- **useServiceBell()**: Shows ring message, transforms room via `roomTransformer`, shows restore message, transitions to hallway after delay.
+- **snapCameraToBoss() / getCameraSnapRotation()**: Calculates yaw/pitch to face boss, sets snap target for one-time camera snap in main.js.
+
+#### Interactions
+- **With Player**: Manages combat, damage, death handling.
+- **With Boss**: Updates, hit detection, defeat logic.
+- **With Tutorial**: Starts boss on completion.
+- **With Systems**: Uses physics for collisions, HUD for UI, cutscenes for narrative.
+- **Global Access**: `window.lobbyScene = this` for debug/cross-file access.
+
+#### Potential Issues/Notes
+- Async loads can fail; error handling logs but continues.
+- Game over prevents updates but renders static scene.
+- Relies on main.js for animation loop and transitions.
+
+### src/entities/player.js
+This file defines the `Player` class, the core controllable entity (a ghost). It handles model loading, combat mode toggling, shooting mechanics (raycasting for hits), health management, and basic updates. Integrates with scene, camera, HUD, and tutorial.
+
+#### Class Structure
+- **Constructor Parameters**: `scene` (THREE.Scene), `camera` (PerspectiveCamera), `hud` (HUD instance).
+- **Key Properties**:
+  - `ghost`: Loaded GLTF model for the player body.
+  - `gun`: Loaded GLTF or fallback geometry for the weapon.
+  - `tutorial`: Set later for spirit release callbacks.
+  - `combatMode`: Boolean for combat state.
+  - `health`: Instance of `Health` (default max=5).
+  - `_isDead`: Internal flag to prevent multiple death triggers.
+  - `cameraOffset`: Vector3 for third-person offset.
+  - `hoverHeight`: Y-position for ghost hovering.
+  - `crosshair`: DOM element for aiming (hidden by default).
+  - `raycaster`: THREE.Raycaster for shooting.
+  - `canShoot / shootCooldown`: Throttle shooting.
+  - `tracerDuration / tracerMaterial`: For visual shot tracers.
+
+#### Initialization Flow
+1. Sets up properties.
+2. Initializes HUD hearts if HUD provided.
+3. Loads models async in constructor calls (from LobbyScene).
+
+#### Key Methods and How They Work
+- **setTutorial(tutorial)**: Links to tutorial instance.
+- **loadGhost(url)**: Async GLTF load, positions ghost (e.g., at (10, hoverHeight, 0)), adds to scene.
+- **loadGun(url)**: Async load via `loadAssets` (from loader.js), scales/positions/rotates, hides initially.
+- **createFallbackGun()**: If load fails, creates simple box+cylinder group, adds to camera.
+- **enterCombat()**:
+  - Sets combatMode=true.
+  - Shows crosshair.
+  - Attaches gun to camera, positions it, shows it.
+  - Resets camera position to first-person (0,1.6,0).
+  - Adds mousedown listener for shooting.
+- **exitCombat()**:
+  - Sets combatMode=false.
+  - Hides crosshair.
+  - Detaches gun from camera, hides it.
+  - Removes shoot listener.
+  - Resets camera to offset (third-person).
+- **update()**: If ghost exists, sets its Y to hoverHeight (prevents sinking).
+- **shoot()**:
+  - Cooldown check.
+  - Gets gun world position and camera direction.
+  - Raycasts against enemies (userData.isEnemy) or boss (isBoss).
+  - If hit:
+    - For boss: Damages via scene.userData.boss.takeDamage(10), shows hit marker via lobbyScene.
+    - For enemies (tutorial boxes): Removes object, disposes resources, calls tutorial.releaseSpirit().
+  - Creates red line tracer from gun to hit or far point, removes after duration.
+- **takeDamage(amount=1)**:
+  - Guards if already dead.
+  - Damages health, logs HP.
+  - Updates HUD hearts.
+  - If health <=0, calls `onDeath()`.
+- **onDeath()**:
+  - Guards with _isDead.
+  - Logs death.
+  - Calls lobbyScene.handlePlayerDefeat() via window.lobbyScene.
+
+#### Interactions
+- **With Scene**: Adds models, raycasts children.
+- **With Camera**: Attaches/detaches gun, adjusts position.
+- **With HUD**: Updates hearts.
+- **With Tutorial/Boss**: Hit callbacks.
+- **Global**: Uses window for scene access.
+
+#### Potential Issues/Notes
+- Shooting assumes enemies/boss have userData flags.
+- Fallback gun is basic; prefer GLTF.
+- Death is irreversible until restart.
+
+### src/entities/health.js
+This is a simple utility class for managing health points. It's used by Player (and likely Boss) to track damage and death.
+
+#### Class Structure
+- **Constructor Parameter**: `max` (default=5).
+- **Properties**:
+  - `max`: Maximum health.
+  - `current`: Current health (starts at max).
+
+#### Key Methods
+- **takeDamage(amount=1)**: Reduces current by amount, clamps to >=0.
+- **heal(amount=1)**: Increases current by amount, clamps to <=max.
+- **isDead()**: Returns true if current <=0.
+- **getPercent()**: Returns (current / max) * 100.
+
+#### How It Works
+- Pure data class, no dependencies.
+- Used in Player/Boss for damage logic and UI updates (e.g., hearts, bars).
+- Clamping ensures no overflow/underflow.
+
+#### Interactions
+- Integrated into entities like Player (`player.health.takeDamage()`).
+- Percent used for health bar widths.
+
+#### Potential Issues/Notes
+- No events/callbacks; callers check isDead() manually.
+- Simple; could extend for regen, etc.
+
+---
+
+## Potential Next Steps for Consistency
+- **Implement Missing Scenes**: Flesh out `level3scene.js` based on hallway pattern.
+- **Expand Entities**: Add NPC interactions, boss AI using similar physics/combat.
+- **Systems Integration**: Ensure all scenes use physics/inventory consistently (e.g., add to HallwayScene).
+- **PDF Incorporation**: If the game design PDF becomes accessible, extract mechanics (e.g., story, levels) to align code.
+- **Improvements**: Add loading screens, optimize performance (e.g., for models), mobile controls.
+- **Consistency Tips**: Reuse vectors/objects to avoid GC; standardize scene APIs; use events for transitions.
+
+Let me know what part to expand/work on next (e.g., fix bugs in tutorial, add level3, or debug collisions)!

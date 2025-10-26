@@ -1,10 +1,14 @@
+// src/main.js
 import * as THREE from "three";
 import { initRenderer } from "./core/renderer.js";
 import LobbyScene from "./scenes/lobbyScene.js";
+import HallwayScene from './scenes/hallwayScene.js';
+import BathroomScene from './scenes/bathroomScene.js';
 import CutsceneManager from "./systems/cutsceneManager.js";
 import { tutorialCutscene } from "./cutscenes/tutorialCutscene.js";
 
-let renderer, camera, lobbyScene;
+let renderer, camera, currentScene, lobbyScene, hallwayScene,bathroomScene;
+
 const mouseSensitivity = 0.002;
 
 let yaw = 0;
@@ -14,10 +18,7 @@ const yawObject = new THREE.Object3D();
 const pitchObject = new THREE.Object3D();
 
 async function init() {
-  // Initialize renderer
   renderer = initRenderer();
-
-  // Initialize camera
   camera = new THREE.PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
@@ -26,14 +27,12 @@ async function init() {
   );
   camera.position.set(0, 2, 5);
 
-  // Set up camera hierarchy for rotation
   yawObject.add(pitchObject);
   pitchObject.add(camera);
 
   console.log("Renderer initialized:", renderer);
   console.log("Camera initialized:", camera);
 
-  // Create the cutscene container overlay
   const cutsceneContainer = document.createElement("div");
   cutsceneContainer.id = "cutscene-container";
   document.body.appendChild(cutsceneContainer);
@@ -45,7 +44,7 @@ async function init() {
     width: "100%",
     height: "100%",
     backgroundColor: "black",
-    display: "none", // hidden by default
+    display: "none",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
@@ -54,17 +53,13 @@ async function init() {
     textAlign: "center",
   });
 
-  // Create cutscene manager and play tutorial cutscene
   const cutsceneManager = new CutsceneManager("cutscene-container");
-
-  // Play the cutscene before the game starts
   await cutsceneManager.play(tutorialCutscene);
 
-  // Create lobby scene (includes tutorial and boss)
   lobbyScene = new LobbyScene(renderer, camera);
   lobbyScene.scene.add(yawObject);
+  currentScene = lobbyScene;
 
-  // Pointer Lock - activate on double-click
   document.body.addEventListener("dblclick", () => {
     if (document.pointerLockElement !== document.body) {
       document.body.requestPointerLock();
@@ -97,7 +92,6 @@ async function init() {
     }
   });
 
-  // Keyboard controls
   const keys = {
     up: false,
     down: false,
@@ -141,15 +135,13 @@ async function init() {
         break;
       case "f":
       case "F":
-        // Pickup bell
-        if (lobbyScene.serviceBell) {
+        if (currentScene === lobbyScene && lobbyScene.serviceBell) {
           lobbyScene.pickupBell();
         }
         break;
       case "e":
       case "E":
-        // Use selected inventory item
-        const selectedItem = lobbyScene.inventory.getSelectedItem();
+        const selectedItem = currentScene.inventory?.getSelectedItem();
         if (selectedItem && selectedItem.onUse) {
           selectedItem.onUse();
         }
@@ -190,32 +182,30 @@ async function init() {
     }
   });
 
-  // Main game loop
-  function animate() {
-    requestAnimationFrame(animate);
+function animate() {
+  requestAnimationFrame(animate);
 
-    if (!lobbyScene.player.ghost) {
-      lobbyScene.update();
-      return;
-    }
+  if (!currentScene.player.ghost) {
+    currentScene.update();
+    return;
+  }
 
-    // Check for camera snap (e.g., when boss spawns)
-    const snapRotation = lobbyScene.getCameraSnapRotation();
-    if (snapRotation) {
-      yaw = snapRotation.yaw;
-      pitch = snapRotation.pitch;
-      console.log("Camera snapped to target!");
-    }
+  const snapRotation = currentScene.getCameraSnapRotation?.();
+  if (snapRotation) {
+    yaw = snapRotation.yaw;
+    pitch = snapRotation.pitch;
+    console.log("Camera snapped to target!");
+  }
 
-    // Update camera rotation
+  let forward = new THREE.Vector3();
+  let right = new THREE.Vector3();
+
+  if (currentScene instanceof LobbyScene || currentScene instanceof BathroomScene) {
+    // First-person controls for LobbyScene and BathroomScene
     yawObject.rotation.y = yaw;
     pitchObject.rotation.x = pitch;
-
-    // Calculate movement vectors
-    let forward = new THREE.Vector3();
-    let right = new THREE.Vector3();
-
-    if (lobbyScene.player.combatMode) {
+    
+    if (currentScene.player.combatMode) {
       yawObject.getWorldDirection(forward);
       forward.negate();
       forward.y = 0;
@@ -230,105 +220,121 @@ async function init() {
       ).normalize();
       right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
     }
+    yawObject.position.copy(currentScene.player.ghost.position);
+  } else if (currentScene instanceof HallwayScene) {
+    // First-person camera for HallwayScene with conditional movement
+    yawObject.rotation.y = yaw;
+    pitchObject.rotation.x = pitch;
+    
+    // Update camera position to follow player
+    yawObject.position.copy(currentScene.player.ghost.position);
+    
+    // Check if puzzle is complete and normal movement is allowed
+    if (currentScene.allowNormalMovement) {
+      forward = new THREE.Vector3(
+        -Math.sin(yaw),
+        0,
+        -Math.cos(yaw)
+      ).normalize();
+      right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)).normalize();
+    } else {
+      // During puzzle: no manual movement
+      currentScene.updateWithCameraRotation(yaw, pitch);
+      return;
+    }
+  }
 
-    // Apply movement
-    const moveSpeed = 0.1;
-    let moveVector = new THREE.Vector3();
-    if (keys.up || keys.w) moveVector.add(forward);
-    if (keys.down || keys.s) moveVector.add(forward.clone().multiplyScalar(-1));
-    if (keys.left || keys.a) moveVector.add(right.clone().multiplyScalar(-1));
-    if (keys.right || keys.d) moveVector.add(right);
+  // Movement section
+  const moveSpeed = 0.1;
+  let moveVector = new THREE.Vector3();
+  if (keys.up || keys.w) moveVector.add(forward);
+  if (keys.down || keys.s) moveVector.add(forward.clone().multiplyScalar(-1));
+  if (keys.left || keys.a) moveVector.add(right.clone().multiplyScalar(-1));
+  if (keys.right || keys.d) moveVector.add(right);
 
-    if (moveVector.length() > 0) {
-      moveVector.normalize();
-
-      // Get collision-safe movement from physics system
-      const currentPos = lobbyScene.player.ghost.position;
-      const safeMovement = lobbyScene.physics.getSafeMovement(
+  if (moveVector.length() > 0) {
+    moveVector.normalize();
+    const currentPos = currentScene.player.ghost.position;
+    
+    let finalMovement;
+    if (currentScene.ghostTransitionActive) {
+      // During ghost transition, allow free movement
+      finalMovement = moveVector.clone().multiplyScalar(moveSpeed);
+      console.log("👻 Ghost mode active - passing through walls");
+    } else {
+      // Normal collision detection
+      finalMovement = currentScene.physics.getSafeMovement(
         currentPos,
         moveVector,
         moveSpeed
       );
-
-      // Apply the safe movement
-      lobbyScene.player.ghost.position.add(safeMovement);
-
-      if (!lobbyScene.player.combatMode) {
-        lobbyScene.player.ghost.rotation.y =
-          Math.atan2(moveVector.z, -moveVector.x) + Math.PI;
-      }
     }
+    
+    currentScene.player.ghost.position.add(finalMovement);
 
-    // Update camera position to follow player
-    yawObject.position.copy(lobbyScene.player.ghost.position);
-
-    // Update lobby scene (tutorial, boss, etc.) - pass current yaw and pitch
-    //lobbyScene.camera.rotation.y = yaw;
-    //lobbyScene.camera.rotation.x = pitch;
-    //lobbyScene.update();
-    // FIXED: Pass the actual yaw and pitch values to the scene
-    lobbyScene.updateWithCameraRotation(yaw, pitch);
+    if (!currentScene.player.combatMode) {
+      currentScene.player.ghost.rotation.y =
+        Math.atan2(moveVector.z, -moveVector.x) + Math.PI;
+    }
   }
 
+  currentScene.updateWithCameraRotation(yaw, pitch);
+}
   animate();
 
-  // Debug helpers
-  window.enterCombat = () => lobbyScene.player.enterCombat();
-  window.exitCombat = () => lobbyScene.player.exitCombat();
-  window.startBoss = () => lobbyScene.startBossFight();
+  window.enterCombat = () => currentScene.player.enterCombat();
+  window.exitCombat = () => currentScene.player.exitCombat();
+  window.startBoss = () => currentScene.startBossFight?.();
   window.toggleCollisionDebug = () => {
-    lobbyScene.physics.debugEnabled = !lobbyScene.physics.debugEnabled;
-    console.log("Collision debug:", lobbyScene.physics.debugEnabled ? "ON" : "OFF");
+    currentScene.physics.debugEnabled = !currentScene.physics.debugEnabled;
+    console.log("Collision debug:", currentScene.physics.debugEnabled ? "ON" : "OFF");
   };
   window.listCollisionObjects = () => {
-    console.log(`Total collision objects: ${lobbyScene.physics.collisionObjects.length}`);
-    lobbyScene.physics.collisionObjects.forEach((obj, i) => {
+    console.log(`Total collision objects: ${currentScene.physics.collisionObjects.length}`);
+    currentScene.physics.collisionObjects.forEach((obj, i) => {
       console.log(`${i}: ${obj.name || 'unnamed'} - visible: ${obj.visible}, pos:`, obj.position);
     });
   };
   window.testRaycast = () => {
-    const pos = lobbyScene.player.ghost.position;
+    const pos = currentScene.player.ghost.position;
     console.log("Testing raycast from player position:", pos);
     const raycaster = new THREE.Raycaster();
     raycaster.set(pos.clone().add(new THREE.Vector3(0, 1.5, 0)), new THREE.Vector3(1, 0, 0));
     raycaster.far = 5;
-    const hits = raycaster.intersectObjects(lobbyScene.physics.collisionObjects, false);
+    const hits = raycaster.intersectObjects(currentScene.physics.collisionObjects, false);
     console.log(`Found ${hits.length} hits:`, hits);
   };
   window.highlightCollisionObjects = () => {
-    // Remove old highlights
     if (window._collisionHighlights) {
-      window._collisionHighlights.forEach(h => lobbyScene.scene.remove(h));
+      window._collisionHighlights.forEach(h => currentScene.scene.remove(h));
     }
     window._collisionHighlights = [];
 
-    // Add box helpers to all collision objects
-    lobbyScene.physics.collisionObjects.forEach(obj => {
+    currentScene.physics.collisionObjects.forEach(obj => {
       const box = new THREE.BoxHelper(obj, 0x00ff00);
-      lobbyScene.scene.add(box);
+      currentScene.scene.add(box);
       window._collisionHighlights.push(box);
     });
     console.log(`Highlighted ${window._collisionHighlights.length} collision objects in green`);
   };
   window.clearHighlights = () => {
     if (window._collisionHighlights) {
-      window._collisionHighlights.forEach(h => lobbyScene.scene.remove(h));
+      window._collisionHighlights.forEach(h => currentScene.scene.remove(h));
       window._collisionHighlights = [];
       console.log("Cleared highlights");
     }
   };
   window.showPlayerBox = () => {
-    const pos = lobbyScene.player.ghost.position;
+    const pos = currentScene.player.ghost.position;
     console.log("Player position:", pos);
-    console.log("Player radius:", lobbyScene.physics.playerRadius);
+    console.log("Player radius:", currentScene.physics.playerRadius);
 
-    // Check what it's colliding with using sphere collision
     let collisionCount = 0;
-    lobbyScene.physics.boundingBoxes.forEach((cached, i) => {
+    currentScene.physics.boundingBoxes.forEach((cached, i) => {
       const dx = pos.x - cached.position.x;
       const dz = pos.z - cached.position.z;
       const distSq = dx * dx + dz * dz;
-      const minDist = lobbyScene.physics.playerRadius + cached.radius;
+      const minDist = currentScene.physics.playerRadius + cached.radius;
       const minDistSq = minDist * minDist;
 
       if (distSq < minDistSq) {
@@ -343,8 +349,8 @@ async function init() {
   };
   window.debugCollisions = () => {
     console.log("=== COLLISION DEBUG ===");
-    console.log(`Total objects: ${lobbyScene.physics.boundingBoxes.length}`);
-    lobbyScene.physics.boundingBoxes.forEach((cached, i) => {
+    console.log(`Total objects: ${currentScene.physics.boundingBoxes.length}`);
+    currentScene.physics.boundingBoxes.forEach((cached, i) => {
       console.log(`${i}: ${cached.mesh.name || 'unnamed'} - pos: (${cached.position.x.toFixed(2)}, ${cached.position.z.toFixed(2)}), radius: ${cached.radius.toFixed(2)}`);
     });
   };
@@ -352,9 +358,120 @@ async function init() {
 
 init().catch((error) => console.error("Init failed:", error));
 
-// Handle window resize
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+window.transitionToHallway = () => {
+  console.log("🚪 Transitioning to Hallway...");
+  
+  if (!currentScene || !currentScene.player || !currentScene.player.ghost) {
+    console.error("❌ Cannot transition: No valid player found");
+    return;
+  }
+  
+  // Save current state
+  const playerPosition = currentScene.player.ghost.position.clone();
+  const cameraRotation = {
+    yaw: yaw,
+    pitch: pitch
+  };
+  
+  console.log("Player position before transition:", playerPosition);
+  
+  // Remove yawObject from current scene
+  if (currentScene.scene && yawObject.parent === currentScene.scene) {
+    currentScene.scene.remove(yawObject);
+  }
+  
+  // Reset camera local position to match first-person setup
+  camera.position.set(0, 1.6, 0);
+  
+  // Create hallway scene with existing player and camera state
+  hallwayScene = new HallwayScene(
+    renderer, 
+    camera, 
+    currentScene.player,  // Pass existing player
+    playerPosition,        // Pass player position
+    cameraRotation        // Pass camera rotation
+  );
+  
+  // Add camera rig to new scene
+  hallwayScene.scene.add(yawObject);
+  
+  // Position yawObject at player position immediately
+  yawObject.position.copy(playerPosition);
+  
+  // Set as current scene
+  currentScene = hallwayScene;
+  
+  // Restore camera rotation
+  const initialRotation = hallwayScene.getInitialCameraRotation();
+  yaw = initialRotation.yaw;
+  pitch = initialRotation.pitch;
+  
+  yawObject.rotation.y = yaw;
+  pitchObject.rotation.x = pitch;
+  
+  console.log(`✅ Transitioned to hallway at position (${playerPosition.x.toFixed(1)}, ${playerPosition.y.toFixed(1)}, ${playerPosition.z.toFixed(1)})`);
+  console.log(`📐 Camera rotation - Yaw: ${yaw.toFixed(2)}, Pitch: ${pitch.toFixed(2)}`);
+  console.log("YawObject position:", yawObject.position);
+};
+
+// Transition to Bathroom Scene
+window.transitionToBathroom = () => {
+  console.log("🚿 Transitioning to Bathroom...");
+  
+  if (!currentScene || !currentScene.player || !currentScene.player.ghost) {
+    console.error("❌ Cannot transition: No valid player found");
+    return;
+  }
+  
+  // Save current state
+  const playerPosition = currentScene.player.ghost.position.clone();
+  const cameraRotation = {
+    yaw: yaw,
+    pitch: pitch
+  };
+  
+  console.log("Player position before transition:", playerPosition);
+  
+  // Remove yawObject from current scene
+  if (currentScene.scene && yawObject.parent === currentScene.scene) {
+    currentScene.scene.remove(yawObject);
+  }
+  
+  // Reset camera local position for first-person
+  camera.position.set(0, 1.6, 0);
+  
+  // Create bathroom scene with existing player and camera state
+  bathroomScene = new BathroomScene(
+    renderer, 
+    camera, 
+    currentScene.player,  // Pass existing player
+    playerPosition,        // Pass player position
+    cameraRotation        // Pass camera rotation
+  );
+  
+  // Add camera rig to new scene
+  bathroomScene.scene.add(yawObject);
+  
+  // Position yawObject at player position immediately
+  yawObject.position.copy(playerPosition);
+  
+  // Set as current scene
+  currentScene = bathroomScene;
+  
+  // Restore camera rotation
+  const initialRotation = bathroomScene.getInitialCameraRotation();
+  yaw = initialRotation.yaw;
+  pitch = initialRotation.pitch;
+  
+  yawObject.rotation.y = yaw;
+  pitchObject.rotation.x = pitch;
+  
+  console.log(`✅ Transitioned to bathroom at position (${playerPosition.x.toFixed(1)}, ${playerPosition.y.toFixed(1)}, ${playerPosition.z.toFixed(1)})`);
+  console.log(`📐 Camera rotation - Yaw: ${yaw.toFixed(2)}, Pitch: ${pitch.toFixed(2)}`);
+};
