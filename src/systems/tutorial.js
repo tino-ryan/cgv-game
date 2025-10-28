@@ -73,12 +73,11 @@ export default class Tutorial {
     this.initialPitch = pitch;
     this.playerSpawnPos = this.player.ghost.position.clone();
 
+    // Only show the welcome message here
     this.showMessage(this.phases[0].msg);
 
+    // Start the first phase after a short delay
     setTimeout(() => {
-      this.showMessage(
-        "Double-click to enable Look Mode, then move your mouse to look around. Press ESC to exit Look Mode."
-      );
       this.executePhase();
     }, 2000);
   }
@@ -93,14 +92,24 @@ export default class Tutorial {
 
     switch (currentPhase.type) {
       case "look":
+        // Only show double-click message when tutorial is actually in the look phase
+        if (!this.cameraMovementDetected) {
+          this.showMessage(
+            "Double-click to enable Look Mode, then move your mouse to look around. Press ESC to exit Look Mode.",
+            "40px"
+          );
+        }
         break;
+
       case "firstMove":
         this.spawnMarker(currentPhase.pos, 0); // Use model index 0
         this.showMessage(currentPhase.msg + " Use WASD or Arrow Keys to move.");
         break;
+
       case "movementTraining":
         this.startMovementTraining();
         break;
+
       case "spiritRelease":
         this.startSpiritRelease();
         break;
@@ -480,11 +489,22 @@ export default class Tutorial {
 
     if (totalDelta > this.cameraMovementThreshold) {
       this.cameraMovementDetected = true;
+
+      // Hide the "double-click" message
+      const existing = document.getElementById("tutorialMessage");
+      if (existing) existing.remove();
+
+      // Show success message slightly lower than top
       this.showMessage(
-        "Great! You've mastered looking around. Press ESC to exit Look Mode."
+        "Great! You've mastered looking around. Press ESC to exit Look Mode.",
+        "40px"
       );
 
       setTimeout(() => {
+        // Remove success message after 2s
+        const msg = document.getElementById("tutorialMessage");
+        if (msg) msg.remove();
+
         this.phase++;
         this.executePhase();
       }, 2000);
@@ -603,9 +623,26 @@ export default class Tutorial {
     animate();
   }
 
-  showMessage(msg) {
-    if (this.hud && this.hud.showMessage) {
-      this.hud.showMessage(msg);
-    }
+  showMessage(msg, top = "20px") {
+    // Remove existing message first
+    const existing = document.getElementById("tutorialMessage");
+    if (existing) existing.remove();
+
+    const div = document.createElement("div");
+    div.id = "tutorialMessage";
+    div.innerText = msg;
+    div.style.position = "absolute";
+    div.style.top = top; // allows positioning higher/lower
+    div.style.left = "50%";
+    div.style.transform = "translateX(-50%)";
+    div.style.color = "white";
+    div.style.background = "rgba(0,0,0,0.7)";
+    div.style.padding = "10px 20px";
+    div.style.borderRadius = "10px";
+    div.style.zIndex = "9999";
+    div.style.fontFamily = "Arial, sans-serif";
+    div.style.fontSize = "16px";
+
+    document.body.appendChild(div);
   }
 }

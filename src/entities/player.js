@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { loadAssets } from "../core/loader.js";
 import { Health } from "./health.js";
+import { applyGoodGlow } from "../core/filters.js";
 
 export default class Player {
   constructor(scene, camera, hud) {
@@ -54,6 +55,11 @@ export default class Player {
       this.ghost.scale.set(1, 1, 1);
       this.ghost.position.set(10, this.hoverHeight, 0);
       this.ghost.rotation.y = Math.PI; // face forward
+
+      this.ghost.traverse((obj) => {
+        obj.userData.isPlayerGhost = true;
+        obj.userData.protectFromFilter = true;
+      });
 
       // Fix lighting + enable shadows
       this.ghost.traverse((child) => {

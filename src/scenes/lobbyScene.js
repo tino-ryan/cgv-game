@@ -9,6 +9,12 @@ import RoomTransformation from "../systems/roomTransformation.js";
 import CutsceneManager from "../systems/cutsceneManager.js";
 import { postLobbyCutscene } from "../cutscenes/postLobbyCutscene.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import {
+  applyDirtyScene,
+  applyCleanScene,
+  createDustParticles,
+  updateDustParticles,
+} from "../core/filters.js"; // Update this path
 
 export default class LobbyScene {
   constructor(renderer, camera) {
@@ -18,25 +24,23 @@ export default class LobbyScene {
     this.scene = new THREE.Scene();
     this.clock = new THREE.Clock();
 
-    // Initialize physics system
     this.physics = new PhysicsSystem(this.scene);
-
-    // Initialize inventory system
     this.inventory = new Inventory(null);
-
-    // Initialize room transformation system
     this.roomTransformer = new RoomTransformation(this.scene, this.physics);
 
     this.lobbyModel = null;
+    this.dustParticles = null;
+    this.sparklePass = null;
+    this.lampLights = []; // Store lamp lights
     this.loadLobbyEnvironment();
 
-    // Lights
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(5, 10, 5);
-    this.scene.add(ambient, dirLight);
+    // Lights - store references for scene filters
+    this.ambientLight = new THREE.AmbientLight(0xa89582, 0.6); // Start with dirty tint
+    this.dirLight = new THREE.DirectionalLight(0xa89582, 0.7); // Start with dirty tint
+    this.dirLight.position.set(5, 10, 5);
+    this.dirLight.castShadow = true;
+    this.scene.add(this.ambientLight, this.dirLight);
 
-    // Use HUD class
     this.hud = new HUD();
 
     // Player (with HUD support)
@@ -44,43 +48,32 @@ export default class LobbyScene {
     this.player.loadGhost("/public/assets/models/mainchar.glb");
     this.player.loadGun("/public/assets/models/gun.glb");
 
-    // Set global reference so player can call handlePlayerDefeat
     window.lobbyScene = this;
 
-    // Tutorial (with HUD + Player)
     this.tutorial = new Tutorial(this.hud, this, this.player);
     this.player.setTutorial(this.tutorial);
 
-    // Load orb models for tutorial
     this.loadTutorialOrbModels();
 
-    // Boss will spawn later
     this.boss = null;
     this.bossHealthFill = null;
-
-    // Game state
     this.gameOver = false;
   }
 
   async loadTutorialOrbModels() {
-    // Define the paths to your orb models
-    // You can use different models for each direction
     const orbModelPaths = [
-      "/assets/models/cc0_-_bucket_3.glb", // Model 0 - for first move & back
-      "/assets/models/feather_duster.glb", // Model 1 - for forward
-      "/assets/models/soap.glb", // Model 2 - for left
-      "/assets/models/sponge.glb", // Model 3 - for right
+      "/assets/models/cc0_-_bucket_3.glb",
+      "/assets/models/feather_duster.glb",
+      "/assets/models/soap.glb",
+      "/assets/models/sponge.glb",
     ];
 
     try {
       await this.tutorial.loadOrbModels(orbModelPaths);
       console.log("✅ Tutorial orb models loaded successfully");
-
-      // Start tutorial after models are loaded
       this.tutorial.start(this.camera.rotation.y, this.camera.rotation.x);
     } catch (error) {
       console.error("❌ Error loading tutorial orb models:", error);
-      // Start tutorial anyway with fallback spheres
       this.tutorial.start(this.camera.rotation.y, this.camera.rotation.x);
     }
   }
@@ -97,6 +90,18 @@ export default class LobbyScene {
 
       this.scene.add(this.lobbyModel);
 
+      // Create dust particles system instead of flat overlay
+      this.dustParticles = createDustParticles(this.scene);
+
+      // Apply dirty scene initially with dimmer lighting
+      applyDirtyScene(
+        this.scene,
+        this.renderer,
+        this.dustParticles,
+        this.ambientLight,
+        this.dirLight
+      );
+
       // Register all meshes in the lobby model as collision objects
       this.physics.addCollisionObject(this.lobbyModel, true);
       console.log(
@@ -110,10 +115,8 @@ export default class LobbyScene {
   startBossFight() {
     console.log("⚔️ Boss fight starting...");
 
-    // Keep player in combat mode
     this.player.enterCombat();
 
-    // Spawn the boss with physics reference
     this.boss = new BellboyBoss(
       this.scene,
       this.player,
@@ -121,19 +124,15 @@ export default class LobbyScene {
       this.physics
     );
 
-    // Store boss reference in scene for player to access
     this.scene.userData.boss = this.boss;
     this.scene.userData.lobbyScene = this;
 
-    // Snap camera to look at boss
     this.snapCameraToBoss();
 
-    // Create ONLY boss health bar (removed player health bar)
     this.bossHealthFill = this.hud.createHealthBar("Bellboy Ghost", 50, "red");
 
     console.log("Boss health bar created:", this.bossHealthFill);
 
-    // Show boss introduction message
     this.hud.showMessage("The Bellboy Ghost has appeared! Defeat him!");
     setTimeout(() => {
       this.hud.showMessage("");
@@ -145,7 +144,6 @@ export default class LobbyScene {
       const healthPercent = (this.boss.health / this.boss.maxHealth) * 100;
       this.bossHealthFill.style.width = healthPercent + "%";
 
-      // Show warning message when boss enters chase mode
       if (this.boss.isChasing && !this.boss.chaseMessageShown) {
         this.boss.chaseMessageShown = true;
         this.hud.showMessage(
@@ -159,7 +157,6 @@ export default class LobbyScene {
   }
 
   checkPlayerHit() {
-    // Multiple guards to prevent hits after death
     if (this.gameOver) return;
     if (!this.boss || !this.boss.projectiles || !this.player.ghost) return;
     if (this.player.health.current <= 0) return;
@@ -177,19 +174,15 @@ export default class LobbyScene {
       if (distance < hitRadius) {
         console.log("Player hit by boss projectile!");
 
-        // Remove projectile first
         this.scene.remove(projectile);
         this.boss.projectiles.splice(i, 1);
 
-        // Damage player
         this.player.takeDamage(1);
 
-        // Stop checking if player died
         if (this.player.health.current <= 0) {
           return;
         }
 
-        // Visual feedback - flash screen red
         const flashDiv = document.createElement("div");
         flashDiv.style.position = "fixed";
         flashDiv.style.top = "0";
@@ -216,13 +209,10 @@ export default class LobbyScene {
     this.gameOver = true;
     console.log("💀 Game Over - Player Defeated");
 
-    // Disable player shooting
     this.player.combatMode = false;
 
-    // Stop boss from shooting and remove all projectiles
     if (this.boss) {
       this.boss.isAlive = false;
-      // Remove all remaining projectiles immediately
       if (this.boss.projectiles) {
         this.boss.projectiles.forEach((proj) => {
           try {
@@ -233,7 +223,6 @@ export default class LobbyScene {
       }
     }
 
-    // Clean up boss health bar immediately
     if (this.bossHealthFill && this.bossHealthFill.parentElement) {
       try {
         this.bossHealthFill.parentElement.parentElement.removeChild(
@@ -245,19 +234,16 @@ export default class LobbyScene {
       this.bossHealthFill = null;
     }
 
-    // Exit pointer lock
     if (document.pointerLockElement) {
       document.exitPointerLock();
     }
 
-    // Show Game Over screen after a brief delay
     setTimeout(() => {
       this.showGameOverScreen();
     }, 500);
   }
 
   showGameOverScreen() {
-    // Create overlay
     const overlay = document.createElement("div");
     overlay.id = "game-over-overlay";
     overlay.style.position = "fixed";
@@ -273,7 +259,6 @@ export default class LobbyScene {
     overlay.style.zIndex = "10000";
     overlay.style.fontFamily = "Arial, sans-serif";
 
-    // Game Over text
     const title = document.createElement("h1");
     title.textContent = "GAME OVER";
     title.style.color = "#ff0000";
@@ -282,7 +267,6 @@ export default class LobbyScene {
     title.style.textShadow = "4px 4px 8px black";
     overlay.appendChild(title);
 
-    // Subtitle
     const subtitle = document.createElement("p");
     subtitle.textContent = "The Bellboy Ghost was too powerful...";
     subtitle.style.color = "white";
@@ -290,7 +274,6 @@ export default class LobbyScene {
     subtitle.style.marginBottom = "40px";
     overlay.appendChild(subtitle);
 
-    // Restart button
     const restartBtn = document.createElement("button");
     restartBtn.textContent = "RESTART";
     restartBtn.style.padding = "15px 40px";
@@ -324,21 +307,17 @@ export default class LobbyScene {
   restartGame() {
     console.log("Restarting boss fight...");
 
-    // Remove game over overlay
     const overlay = document.getElementById("game-over-overlay");
     if (overlay) {
       document.body.removeChild(overlay);
     }
 
-    // Reset game state
     this.gameOver = false;
 
-    // Remove old boss if it exists
     if (this.boss && this.boss.mesh) {
       this.scene.remove(this.boss.mesh);
     }
 
-    // Reset player health
     this.player.health.current = this.player.health.max;
     this.player._isDead = false;
     if (this.player.hud) {
@@ -348,15 +327,12 @@ export default class LobbyScene {
       );
     }
 
-    // Restart the boss fight
     this.startBossFight();
   }
 
   showHitMarker() {
-    // Don't show hit marker if game is over
     if (this.gameOver) return;
 
-    // Create hit marker (X in center of screen)
     const marker = document.createElement("div");
     marker.style.position = "fixed";
     marker.style.top = "50%";
@@ -371,7 +347,6 @@ export default class LobbyScene {
     marker.textContent = "X";
     document.body.appendChild(marker);
 
-    // Fade out and remove
     setTimeout(() => {
       marker.style.transition = "opacity 0.3s";
       marker.style.opacity = "0";
@@ -387,7 +362,6 @@ export default class LobbyScene {
     const delta = this.clock.getDelta();
     const time = this.clock.elapsedTime;
 
-    // Don't update if game is over
     if (this.gameOver) {
       this.renderer.render(this.scene, this.camera);
       return;
@@ -395,20 +369,20 @@ export default class LobbyScene {
 
     this.player.update();
 
-    // Only run tutorial if it exists and hasn't completed
+    // Update dust particles animation
+    if (this.dustParticles && this.dustParticles.visible) {
+      updateDustParticles(this.dustParticles, delta);
+    }
+
     if (this.tutorial && this.tutorial.phase < this.tutorial.phases.length) {
-      // Pass the actual yaw and pitch from main.js
       this.tutorial.update({}, this.player, yaw, pitch, delta);
     }
 
-    // Update boss if it exists and game is not over
     if (this.boss && this.boss.isAlive && !this.gameOver) {
       this.boss.update(delta, time);
 
-      // Update boss health bar
       this.updateBossHealth();
 
-      // Check if player is hit by boss projectiles
       if (this.boss.projectiles && this.boss.projectiles.length > 0) {
         this.checkPlayerHit();
       }
@@ -418,19 +392,15 @@ export default class LobbyScene {
       this.boss.defeated &&
       !this.gameOver
     ) {
-      // Check if boss is defeated (only if player is alive)
       this.handleBossDefeat();
     }
 
-    // Animate and check for service bell pickup
     if (this.serviceBell) {
-      // Floating animation
       this.serviceBell.userData.floatOffset += delta * 2;
       this.serviceBell.position.y =
         1.0 + Math.sin(this.serviceBell.userData.floatOffset) * 0.2;
       this.serviceBell.rotation.y += delta;
 
-      // Check if player is nearby
       this.checkBellPickup();
     }
 
@@ -438,7 +408,6 @@ export default class LobbyScene {
   }
 
   update() {
-    // Fallback for when called without rotation data
     this.updateWithCameraRotation(0, 0);
   }
 
@@ -449,7 +418,6 @@ export default class LobbyScene {
     this.hud.showMessage("🎉 Victory! The Bellboy Ghost has been defeated!");
     this.player.exitCombat();
 
-    // Clean up boss health bar only (no player health bar anymore)
     if (this.bossHealthFill && this.bossHealthFill.parentElement) {
       try {
         this.bossHealthFill.parentElement.parentElement.removeChild(
@@ -461,20 +429,16 @@ export default class LobbyScene {
       this.bossHealthFill = null;
     }
 
-    // Wait a short delay before the cutscene starts
     setTimeout(async () => {
       this.hud.showMessage("");
 
-      // Pause gameplay visuals
       if (this.renderer) this.renderer.setAnimationLoop(null);
 
-      // Create a cutscene manager instance
       const cutsceneContainer = document.getElementById("cutscene-container");
       if (!cutsceneContainer) {
         console.error(
           "Cutscene container not found — was it created in main.js?"
         );
-        // Fallback to old behavior
         this.dropServiceBell(this.boss.mesh.position);
         setTimeout(() => {
           this.hud.showMessage("A mysterious bell has appeared... Pick it up!");
@@ -489,17 +453,13 @@ export default class LobbyScene {
 
       console.log("✅ Post-lobby cutscene complete.");
 
-      // Drop the service bell at boss location after cutscene
       this.dropServiceBell(this.boss.mesh.position);
 
-      // Show pickup message
       this.hud.showMessage("A mysterious bell has appeared... Pick it up!");
 
-      // Resume gameplay
       if (this.renderer) {
         const animate = () => {
           requestAnimationFrame(animate);
-          // This will be overridden by main.js's animate loop
         };
         this.renderer.setAnimationLoop(animate);
       }
@@ -517,21 +477,19 @@ export default class LobbyScene {
 
       this.serviceBell = gltf.scene;
       this.serviceBell.position.copy(position);
-      this.serviceBell.position.y = 1.0; // Float at pickup height
+      this.serviceBell.position.y = 1.0;
       this.serviceBell.scale.set(5, 5, 5);
       this.serviceBell.userData.isPickup = true;
       this.serviceBell.userData.itemName = "Service Bell";
 
       this.scene.add(this.serviceBell);
 
-      // Add floating animation
       this.serviceBell.userData.floatOffset = 0;
 
       console.log("Service bell dropped at", position);
     } catch (err) {
       console.error("Failed to load service bell model:", err);
 
-      // Fallback: Create simple bell geometry
       this.createFallbackBell(position);
     }
   }
@@ -565,7 +523,6 @@ export default class LobbyScene {
     );
 
     if (distance < 2.0) {
-      // Show pickup prompt
       if (!this.pickupPromptShown) {
         this.showPickupPrompt();
         this.pickupPromptShown = true;
@@ -609,18 +566,15 @@ export default class LobbyScene {
 
     console.log("Picking up service bell...");
 
-    // Generate icon from 3D model
     const iconUrl = this.generateBellIcon();
 
-    // Remove bell from scene
     this.scene.remove(this.serviceBell);
 
-    // Add to inventory
     const bellItem = {
       name: "Bell",
       description: "A worn service bell that summons... something.",
       icon: iconUrl,
-      iconEmoji: "🔔", // Fallback emoji
+      iconEmoji: "🔔",
       onUse: () => this.useServiceBell(),
     };
 
@@ -634,7 +588,6 @@ export default class LobbyScene {
   }
 
   generateBellIcon() {
-    // Create a small offscreen renderer for the icon
     const iconSize = 128;
     const iconRenderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -644,26 +597,21 @@ export default class LobbyScene {
     iconRenderer.setSize(iconSize, iconSize);
     iconRenderer.setClearColor(0x000000, 0);
 
-    // Create camera for icon
     const iconCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
     iconCamera.position.set(2, 2, 2);
     iconCamera.lookAt(0, 0, 0);
 
-    // Create temporary scene with bell
     const iconScene = new THREE.Scene();
 
-    // Add lighting
     const light1 = new THREE.DirectionalLight(0xffffff, 1);
     light1.position.set(1, 1, 1);
     iconScene.add(light1);
     const light2 = new THREE.AmbientLight(0xffffff, 0.5);
     iconScene.add(light2);
 
-    // Clone the bell model
     const bellClone = this.serviceBell.clone();
     bellClone.position.set(0, 0, 0);
 
-    // Scale to fit icon
     const box = new THREE.Box3().setFromObject(bellClone);
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
@@ -672,13 +620,10 @@ export default class LobbyScene {
 
     iconScene.add(bellClone);
 
-    // Render to canvas
     iconRenderer.render(iconScene, iconCamera);
 
-    // Get data URL
     const iconDataUrl = iconRenderer.domElement.toDataURL("image/png");
 
-    // Cleanup
     iconRenderer.dispose();
 
     return iconDataUrl;
@@ -691,13 +636,24 @@ export default class LobbyScene {
       "🔔 *Ring ring* The bell chimes throughout the hotel..."
     );
 
-    // Wait a moment
     await this.sleep(2000);
 
-    // Transform the room
     await this.roomTransformer.transformRoom(this.lobbyModel);
 
-    // Update message
+    // Apply clean scene filter with brighter lighting
+    applyCleanScene(
+      this.scene,
+      this.renderer,
+      this.sparklePass,
+      this.ambientLight,
+      this.dirLight
+    );
+
+    // Hide dust particles
+    if (this.dustParticles) {
+      this.dustParticles.visible = false;
+    }
+
     setTimeout(() => {
       this.hud.showMessage("The lobby has been restored to its former glory!");
     }, 1000);
@@ -710,7 +666,6 @@ export default class LobbyScene {
   snapCameraToBoss() {
     if (!this.boss || !this.player.ghost) return;
 
-    // Calculate the direction from player to boss
     const playerPos = this.player.ghost.position;
     const bossPos = this.boss.mesh.position;
 
@@ -718,14 +673,11 @@ export default class LobbyScene {
     const dz = bossPos.z - playerPos.z;
     const dy = bossPos.y - playerPos.y;
 
-    // Calculate yaw (horizontal rotation)
     const yaw = Math.atan2(-dx, -dz);
 
-    // Calculate pitch (vertical rotation) - looking slightly up at the boss
     const horizontalDist = Math.sqrt(dx * dx + dz * dz);
     const pitch = Math.atan2(dy, horizontalDist);
 
-    // Store the target camera rotation
     this.cameraSnapTarget = { yaw, pitch };
     this.cameraSnapActive = true;
 
@@ -738,7 +690,7 @@ export default class LobbyScene {
 
   getCameraSnapRotation() {
     if (this.cameraSnapActive && this.cameraSnapTarget) {
-      this.cameraSnapActive = false; // Only snap once
+      this.cameraSnapActive = false;
       return this.cameraSnapTarget;
     }
     return null;
