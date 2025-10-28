@@ -51,14 +51,14 @@ export default class BellboyBoss {
   }
 
   loadProjectileModels() {
-    // Paths relative to public folder (works with Vite, CRA, etc.)
+    // Paths relative to public folder - cleaning items theme!
     const modelPaths = [
-      '/assets/models/pillow/scene.gltf',
       '/assets/models/flower_pot/scene.gltf',
+      //'/assets/models/suitcases/scene.gltf',
+      //'/assets/models/low_poly_mini_succulent_collection/scene.gltf',
+      '/assets/models/pillow/scene.gltf',
       '/assets/models/key/scene.gltf',
-      '/assets/models/suitcases/scene.gltf',
-      '/assets/models/coffee_mug/scene.gltf',
-      '/assets/models/succulent/scene.gltf'
+      '/assets/models/game_ready_-_used_coffee_mug/scene.gltf'
     ];
 
     let loadedCount = 0;
@@ -71,11 +71,11 @@ export default class BellboyBoss {
           this.projectileModels.push(gltf.scene.clone());
           loadedCount++;
 
-          console.log(`Loaded projectile model ${index + 1}/${modelPaths.length}: ${path}`);
+          console.log(`🧼 Loaded projectile model ${index + 1}/${modelPaths.length}: ${path}`);
 
           if (loadedCount === modelPaths.length) {
             this.modelsLoaded = true;
-            console.log("✅ All projectile models loaded!");
+            console.log("✅ All cleaning item projectiles loaded!");
           }
         },
         // Progress callback
@@ -152,12 +152,14 @@ export default class BellboyBoss {
   }
 
   createBoss() {
-    // Boss body
-    const geometry = new THREE.BoxGeometry(2, 3, 2);
+    // Boss body - SMALLER SIZE for better visibility
+    const geometry = new THREE.BoxGeometry(1.5, 2.5, 1.5);
     const material = new THREE.MeshStandardMaterial({
       color: 0x8B0000,
       emissive: 0x8B0000,
-      emissiveIntensity: 0.3,
+      emissiveIntensity: 0.5,
+      metalness: 0.3,
+      roughness: 0.7
     });
 
     this.mesh = new THREE.Mesh(geometry, material);
@@ -165,25 +167,25 @@ export default class BellboyBoss {
     // Position boss in front of player (if available)
     if (this.player && this.player.ghost) {
       const playerPos = this.player.ghost.position.clone();
-      this.mesh.position.set(playerPos.x, 1.5, playerPos.z - 10);
+      this.mesh.position.set(playerPos.x, 2.0, playerPos.z - 10);
     } else {
-      this.mesh.position.set(0, 1.5, -10);
+      this.mesh.position.set(0, 2.0, -10);
     }
 
-    // Add eyes as children
-    const eyeGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+    // Add eyes as children - ADJUSTED SIZE
+    const eyeGeometry = new THREE.SphereGeometry(0.15, 16, 16);
     const eyeMaterial = new THREE.MeshStandardMaterial({
       color: 0xffff00,
       emissive: 0xffff00,
-      emissiveIntensity: 1,
+      emissiveIntensity: 1.5,
     });
 
     const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    leftEye.position.set(-0.4, 0.5, 1.1);
+    leftEye.position.set(-0.3, 0.6, 0.76);
     this.mesh.add(leftEye);
 
     const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    rightEye.position.set(0.4, 0.5, 1.1);
+    rightEye.position.set(0.3, 0.6, 0.76);
     this.mesh.add(rightEye);
 
     // Make raycasting reliable
@@ -215,42 +217,41 @@ export default class BellboyBoss {
   shoot() {
     if (!this.player || !this.player.ghost || !this.isAlive) return;
 
-    // Use loaded GLTF models if available, otherwise fallback to sphere
-    let projectile;
+    // Don't shoot if models aren't loaded yet - prevents red ball fallbacks
+    if (!this.modelsLoaded || this.projectileModels.length === 0) return;
 
-    if (this.modelsLoaded && this.projectileModels.length > 0) {
-      // Pick a random model from the loaded ones
-      const randomIndex = Math.floor(Math.random() * this.projectileModels.length);
-      projectile = this.projectileModels[randomIndex].clone();
+    // Pick a random model from the loaded ones
+    const randomIndex = Math.floor(Math.random() * this.projectileModels.length);
+    const projectile = this.projectileModels[randomIndex].clone();
 
-      // Scale the projectile appropriately (adjust as needed)
-      projectile.scale.set(0.5, 0.5, 0.5);
+    // Scale the projectile appropriately - REDUCED SIZES
+    // Different sizes for different items (adjust as needed)
+    const scales = [
+      0.2,  // flower_pot
+      //0.00001,  // suitcases
+      //0.00001,  // succulent
+      2, // pillow
+      0.2,  // key
+      0.01   // coffee_mug  
+    ];
+    
+    const scale = scales[randomIndex] || 0.5;
+    projectile.scale.set(scale, scale, scale);
 
-      // Make sure all children are set up for raycasting
-      projectile.traverse((child) => {
-        if (child.isMesh) {
-          child.userData.isProjectile = true;
-          if (child.geometry) {
-            try {
-              if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
-              if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
-            } catch (e) {
-              // ignore
-            }
+    // Make sure all children are set up for raycasting
+    projectile.traverse((child) => {
+      if (child.isMesh) {
+        child.userData.isProjectile = true;
+        if (child.geometry) {
+          try {
+            if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
+            if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+          } catch (e) {
+            // ignore
           }
         }
-      });
-    } else {
-      // Fallback: create a sphere if models aren't loaded yet
-      const projectileGeometry = new THREE.SphereGeometry(0.25, 12, 12);
-      const projectileMaterial = new THREE.MeshStandardMaterial({
-        color: 0xff0000,
-        emissive: 0xff0000,
-        emissiveIntensity: 1,
-      });
-      projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
-      projectile.userData.isProjectile = true;
-    }
+      }
+    });
 
     // Position at boss location
     projectile.position.copy(this.mesh.position);
@@ -337,8 +338,8 @@ export default class BellboyBoss {
     }
 
     if (this.mesh) {
-      // Hovering animation
-      this.mesh.position.y = 1.5 + Math.sin(time * 2) * 0.3;
+      // Hovering animation - ADJUSTED for new size
+      this.mesh.position.y = 2.0 + Math.sin(time * 2) * 0.3;
       
       // Chase player if health is below 50%
       if (this.isChasing && this.player && this.player.ghost) {
