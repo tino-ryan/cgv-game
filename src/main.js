@@ -1,13 +1,18 @@
 import * as THREE from "three";
 import { initRenderer } from "./core/renderer.js";
 import LobbyScene from "./scenes/lobbyScene.js";
+import BathroomScene from "./scenes/bathroomScene.js"; // ADD THIS
 import CutsceneManager from "./systems/cutsceneManager.js";
 import { tutorialCutscene } from "./cutscenes/tutorialCutscene.js";
 import SceneManager from "./systems/sceneManager.js";
 import TitleMenu from "./scenes/titleMenu.js";
 import PauseMenu from "./ui/pauseMenu.js";
 
-let renderer, camera, lobbyScene, sceneManager;
+// ===== TESTING MODE =====
+const TESTING_MODE = "bathroom"; // Change to: "lobby", "bathroom", or "normal"
+// =======================
+
+let renderer, camera, currentScene, sceneManager;
 let isPaused = false;
 let pauseMenu;
 const mouseSensitivity = 0.002;
@@ -19,10 +24,8 @@ const yawObject = new THREE.Object3D();
 const pitchObject = new THREE.Object3D();
 
 async function init() {
-  // Initialize renderer
   renderer = initRenderer();
 
-  // Initialize camera
   camera = new THREE.PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
@@ -32,10 +35,6 @@ async function init() {
   camera.position.set(0, 2, 5);
 
   sceneManager = new SceneManager(renderer, camera);
-
-  const titleMenu = new TitleMenu(sceneManager);
-  sceneManager.setScene(null);
-
 
   // Set up camera hierarchy for rotation
   yawObject.add(pitchObject);
@@ -56,7 +55,7 @@ async function init() {
     width: "100%",
     height: "100%",
     backgroundColor: "black",
-    display: "none", // hidden by default
+    display: "none",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
@@ -65,15 +64,45 @@ async function init() {
     textAlign: "center",
   });
 
-  // Create cutscene manager and play tutorial cutscene
-  const cutsceneManager = new CutsceneManager("cutscene-container");
+  // ===== TESTING MODE LOGIC =====
+  if (TESTING_MODE === "bathroom") {
+    console.log("🛁 TESTING MODE: Loading bathroom scene directly");
 
-  // Play the cutscene before the game starts
-  await cutsceneManager.play(tutorialCutscene);
+    // Skip title menu and cutscenes, go straight to bathroom
+    currentScene = new BathroomScene(renderer, camera);
+    currentScene.scene.add(yawObject);
 
-  // Create lobby scene (includes tutorial and boss)
-  lobbyScene = new LobbyScene(renderer, camera);
-  lobbyScene.scene.add(yawObject);
+    // Set initial camera position
+    yawObject.position.set(0, 2, 10);
+
+    // Auto-enable pointer lock for testing (wait for scene to load)
+    setTimeout(() => {
+      console.log("Requesting pointer lock for testing...");
+      document.body.requestPointerLock();
+    }, 500);
+  } else if (TESTING_MODE === "lobby") {
+    console.log("🏨 TESTING MODE: Loading lobby scene directly");
+
+    // Skip title menu and cutscenes, go straight to lobby
+    currentScene = new LobbyScene(renderer, camera);
+    currentScene.scene.add(yawObject);
+
+    // Auto-enable pointer lock for testing
+    setTimeout(() => {
+      document.body.requestPointerLock();
+    }, 100);
+  } else {
+    // Normal mode - show title menu and play cutscenes
+    const titleMenu = new TitleMenu(sceneManager);
+    sceneManager.setScene(null);
+
+    const cutsceneManager = new CutsceneManager("cutscene-container");
+    await cutsceneManager.play(tutorialCutscene);
+
+    currentScene = new LobbyScene(renderer, camera);
+    currentScene.scene.add(yawObject);
+  }
+  // ===== END TESTING MODE =====
 
   // Pointer Lock - activate on double-click
   document.body.addEventListener("dblclick", () => {
@@ -152,17 +181,19 @@ async function init() {
         break;
       case "f":
       case "F":
-        // Pickup bell
-        if (lobbyScene.serviceBell) {
-          lobbyScene.pickupBell();
+        // Pickup bell (only in lobby)
+        if (currentScene.serviceBell) {
+          currentScene.pickupBell();
         }
         break;
       case "e":
       case "E":
         // Use selected inventory item
-        const selectedItem = lobbyScene.inventory.getSelectedItem();
-        if (selectedItem && selectedItem.onUse) {
-          selectedItem.onUse();
+        if (currentScene.inventory) {
+          const selectedItem = currentScene.inventory.getSelectedItem();
+          if (selectedItem && selectedItem.onUse) {
+            selectedItem.onUse();
+          }
         }
         break;
     }
@@ -211,17 +242,19 @@ async function init() {
       renderer.render(sceneManager.currentScene.scene, camera);
     }
 
-    if (!lobbyScene.player.ghost) {
-      lobbyScene.update();
+    if (!currentScene || !currentScene.player || !currentScene.player.ghost) {
+      if (currentScene) currentScene.update();
       return;
     }
 
-    // Check for camera snap (e.g., when boss spawns)
-    const snapRotation = lobbyScene.getCameraSnapRotation();
-    if (snapRotation) {
-      yaw = snapRotation.yaw;
-      pitch = snapRotation.pitch;
-      console.log("Camera snapped to target!");
+    // Check for camera snap (e.g., when boss spawns in lobby)
+    if (currentScene.getCameraSnapRotation) {
+      const snapRotation = currentScene.getCameraSnapRotation();
+      if (snapRotation) {
+        yaw = snapRotation.yaw;
+        pitch = snapRotation.pitch;
+        console.log("Camera snapped to target!");
+      }
     }
 
     // Update camera rotation
@@ -232,7 +265,7 @@ async function init() {
     let forward = new THREE.Vector3();
     let right = new THREE.Vector3();
 
-    if (lobbyScene.player.combatMode) {
+    if (currentScene.player.combatMode) {
       yawObject.getWorldDirection(forward);
       forward.negate();
       forward.y = 0;
@@ -259,145 +292,60 @@ async function init() {
     if (moveVector.length() > 0) {
       moveVector.normalize();
 
-      // Get collision-safe movement from physics system
-      const currentPos = lobbyScene.player.ghost.position;
-      const safeMovement = lobbyScene.physics.getSafeMovement(
+      const currentPos = currentScene.player.ghost.position;
+      const safeMovement = currentScene.physics.getSafeMovement(
         currentPos,
         moveVector,
         moveSpeed
       );
 
-      // Apply the safe movement
-      lobbyScene.player.ghost.position.add(safeMovement);
+      currentScene.player.ghost.position.add(safeMovement);
 
-      if (!lobbyScene.player.combatMode) {
-        lobbyScene.player.ghost.rotation.y =
+      if (!currentScene.player.combatMode) {
+        currentScene.player.ghost.rotation.y =
           Math.atan2(moveVector.z, -moveVector.x) + Math.PI;
       }
     }
 
     // Update camera position to follow player
-    yawObject.position.copy(lobbyScene.player.ghost.position);
+    yawObject.position.copy(currentScene.player.ghost.position);
 
-    // Update lobby scene (tutorial, boss, etc.) - pass current yaw and pitch
-    //lobbyScene.camera.rotation.y = yaw;
-    //lobbyScene.camera.rotation.x = pitch;
-    //lobbyScene.update();
-    // FIXED: Pass the actual yaw and pitch values to the scene
-    lobbyScene.updateWithCameraRotation(yaw, pitch);
+    // Update current scene
+    currentScene.updateWithCameraRotation(yaw, pitch);
   }
 
-  pauseMenu = new PauseMenu(sceneManager, lobbyScene, (paused) => {
+  pauseMenu = new PauseMenu(sceneManager, currentScene, (paused) => {
     isPaused = paused;
   });
 
   animate();
 
   // Debug helpers
-  window.enterCombat = () => lobbyScene.player.enterCombat();
-  window.exitCombat = () => lobbyScene.player.exitCombat();
-  window.startBoss = () => lobbyScene.startBossFight();
+  window.enterCombat = () => currentScene.player.enterCombat();
+  window.exitCombat = () => currentScene.player.exitCombat();
+  window.startBoss = () => {
+    if (currentScene.startBossFight) {
+      currentScene.startBossFight();
+    } else {
+      console.log("This scene doesn't have a boss fight");
+    }
+  };
   window.toggleCollisionDebug = () => {
-    lobbyScene.physics.debugEnabled = !lobbyScene.physics.debugEnabled;
+    currentScene.physics.debugEnabled = !currentScene.physics.debugEnabled;
     console.log(
       "Collision debug:",
-      lobbyScene.physics.debugEnabled ? "ON" : "OFF"
+      currentScene.physics.debugEnabled ? "ON" : "OFF"
     );
   };
-  window.listCollisionObjects = () => {
-    console.log(
-      `Total collision objects: ${lobbyScene.physics.collisionObjects.length}`
-    );
-    lobbyScene.physics.collisionObjects.forEach((obj, i) => {
-      console.log(
-        `${i}: ${obj.name || "unnamed"} - visible: ${obj.visible}, pos:`,
-        obj.position
-      );
-    });
+  window.switchToBathroom = () => {
+    console.log("🛁 Switching to bathroom scene...");
+    currentScene = new BathroomScene(renderer, camera);
+    currentScene.scene.add(yawObject);
   };
-  window.testRaycast = () => {
-    const pos = lobbyScene.player.ghost.position;
-    console.log("Testing raycast from player position:", pos);
-    const raycaster = new THREE.Raycaster();
-    raycaster.set(
-      pos.clone().add(new THREE.Vector3(0, 1.5, 0)),
-      new THREE.Vector3(1, 0, 0)
-    );
-    raycaster.far = 5;
-    const hits = raycaster.intersectObjects(
-      lobbyScene.physics.collisionObjects,
-      false
-    );
-    console.log(`Found ${hits.length} hits:`, hits);
-  };
-  window.highlightCollisionObjects = () => {
-    // Remove old highlights
-    if (window._collisionHighlights) {
-      window._collisionHighlights.forEach((h) => lobbyScene.scene.remove(h));
-    }
-    window._collisionHighlights = [];
-
-    // Add box helpers to all collision objects
-    lobbyScene.physics.collisionObjects.forEach((obj) => {
-      const box = new THREE.BoxHelper(obj, 0x00ff00);
-      lobbyScene.scene.add(box);
-      window._collisionHighlights.push(box);
-    });
-    console.log(
-      `Highlighted ${window._collisionHighlights.length} collision objects in green`
-    );
-  };
-  window.clearHighlights = () => {
-    if (window._collisionHighlights) {
-      window._collisionHighlights.forEach((h) => lobbyScene.scene.remove(h));
-      window._collisionHighlights = [];
-      console.log("Cleared highlights");
-    }
-  };
-  window.showPlayerBox = () => {
-    const pos = lobbyScene.player.ghost.position;
-    console.log("Player position:", pos);
-    console.log("Player radius:", lobbyScene.physics.playerRadius);
-
-    // Check what it's colliding with using sphere collision
-    let collisionCount = 0;
-    lobbyScene.physics.boundingBoxes.forEach((cached, i) => {
-      const dx = pos.x - cached.position.x;
-      const dz = pos.z - cached.position.z;
-      const distSq = dx * dx + dz * dz;
-      const minDist = lobbyScene.physics.playerRadius + cached.radius;
-      const minDistSq = minDist * minDist;
-
-      if (distSq < minDistSq) {
-        const dist = Math.sqrt(distSq);
-        console.log(`COLLISION ${i}: ${cached.mesh.name || "unnamed"}`);
-        console.log(
-          `  Object pos: (${cached.position.x.toFixed(
-            2
-          )}, ${cached.position.z.toFixed(2)})`
-        );
-        console.log(
-          `  Distance: ${dist.toFixed(2)}, Min: ${minDist.toFixed(
-            2
-          )}, Radius: ${cached.radius.toFixed(2)}`
-        );
-        collisionCount++;
-      }
-    });
-    console.log(`Total collisions: ${collisionCount}`);
-  };
-  window.debugCollisions = () => {
-    console.log("=== COLLISION DEBUG ===");
-    console.log(`Total objects: ${lobbyScene.physics.boundingBoxes.length}`);
-    lobbyScene.physics.boundingBoxes.forEach((cached, i) => {
-      console.log(
-        `${i}: ${
-          cached.mesh.name || "unnamed"
-        } - pos: (${cached.position.x.toFixed(2)}, ${cached.position.z.toFixed(
-          2
-        )}), radius: ${cached.radius.toFixed(2)}`
-      );
-    });
+  window.switchToLobby = () => {
+    console.log("🏨 Switching to lobby scene...");
+    currentScene = new LobbyScene(renderer, camera);
+    currentScene.scene.add(yawObject);
   };
 }
 
