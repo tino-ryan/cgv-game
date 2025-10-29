@@ -115,28 +115,131 @@ export default class LobbyScene {
   startBossFight() {
     console.log("⚔️ Boss fight starting...");
 
-    this.player.enterCombat();
+    // Start the dramatic light flickering effect
+    this.startLightFlicker();
 
-    this.boss = new BellboyBoss(
-      this.scene,
-      this.player,
-      this.hud,
-      this.physics
-    );
-
-    this.scene.userData.boss = this.boss;
-    this.scene.userData.lobbyScene = this;
-
-    this.snapCameraToBoss();
-
-    this.bossHealthFill = this.hud.createHealthBar("Bellboy Ghost", 50, "red");
-
-    console.log("Boss health bar created:", this.bossHealthFill);
-
-    this.hud.showMessage("The Bellboy Ghost has appeared! Defeat him!");
+    // Wait for flicker to finish before spawning boss
     setTimeout(() => {
-      this.hud.showMessage("");
-    }, 3000);
+      this.player.enterCombat();
+
+      this.boss = new BellboyBoss(
+        this.scene,
+        this.player,
+        this.hud,
+        this.physics
+      );
+
+      this.scene.userData.boss = this.boss;
+      this.scene.userData.lobbyScene = this;
+
+      // Apply red glow to the boss after it's created
+      setTimeout(() => {
+        if (this.boss && this.boss.mesh) {
+          this.applyBossRedGlow(this.boss.mesh);
+        }
+      }, 100);
+
+      this.snapCameraToBoss();
+
+      this.bossHealthFill = this.hud.createHealthBar(
+        "Bellboy Ghost",
+        50,
+        "red"
+      );
+
+      this.hud.showMessage("The Bellboy Ghost has appeared! Defeat him!");
+      setTimeout(() => {
+        this.hud.showMessage("");
+      }, 3000);
+    }, 2500);
+  }
+
+  startLightFlicker() {
+    console.log("💡 Starting light flicker effect...");
+
+    const originalAmbientIntensity = this.ambientLight.intensity;
+    const originalDirIntensity = this.dirLight.intensity;
+
+    let flickerCount = 0;
+    const maxFlickers = 8;
+
+    const flickerInterval = setInterval(() => {
+      flickerCount++;
+
+      const randomIntensity = Math.random() * 0.4 + 0.1;
+
+      this.ambientLight.intensity = randomIntensity;
+      this.dirLight.intensity = randomIntensity;
+
+      if (this.lampLights && this.lampLights.length > 0) {
+        this.lampLights.forEach((light) => {
+          light.intensity = randomIntensity * 2;
+        });
+      }
+
+      if (flickerCount > 3) {
+        this.ambientLight.color.setHex(0xff6666);
+        this.dirLight.color.setHex(0xff4444);
+      }
+
+      if (flickerCount >= maxFlickers) {
+        clearInterval(flickerInterval);
+
+        this.ambientLight.intensity = originalAmbientIntensity * 0.8;
+        this.dirLight.intensity = originalDirIntensity * 0.8;
+        this.ambientLight.color.setHex(0xffcccc);
+        this.dirLight.color.setHex(0xffdddd);
+
+        if (this.lampLights && this.lampLights.length > 0) {
+          this.lampLights.forEach((light) => {
+            light.intensity = 1.0;
+            light.color.setHex(0xff8888);
+          });
+        }
+
+        console.log("💡 Light flicker complete");
+      }
+    }, 150);
+  }
+
+  applyBossRedGlow(bossMesh) {
+    console.log("🔴 Applying red glow to boss...");
+
+    bossMesh.traverse((child) => {
+      if (child.isMesh && child.material) {
+        if (!child.userData.originalMaterial) {
+          child.userData.originalMaterial = child.material.clone();
+        }
+
+        const glowMat = child.material.clone();
+        glowMat.emissive = new THREE.Color(0xff0000);
+        glowMat.emissiveIntensity = 0.8;
+
+        glowMat.onBeforeCompile = (shader) => {
+          shader.uniforms.time = { value: 0 };
+
+          shader.fragmentShader = `
+            uniform float time;
+            ${shader.fragmentShader}
+          `.replace(
+            `#include <emissivemap_fragment>`,
+            `#include <emissivemap_fragment>
+             float pulse = sin(time * 2.0) * 0.3 + 0.7;
+             totalEmissiveRadiance *= pulse;
+             float fresnel = pow(1.0 - dot(normalize(vNormal), normalize(vec3(0.0, 0.0, 1.0))), 2.0);
+             diffuseColor.rgb += fresnel * vec3(1.0, 0.0, 0.0) * 0.8 * pulse;
+            `
+          );
+
+          child.userData.glowShader = shader;
+        };
+
+        child.material = glowMat;
+        child.material.needsUpdate = true;
+      }
+    });
+
+    this.bossGlowMesh = bossMesh;
   }
 
   updateBossHealth() {
@@ -369,7 +472,6 @@ export default class LobbyScene {
 
     this.player.update();
 
-    // Update dust particles animation
     if (this.dustParticles && this.dustParticles.visible) {
       updateDustParticles(this.dustParticles, delta);
     }
@@ -380,8 +482,16 @@ export default class LobbyScene {
 
     if (this.boss && this.boss.isAlive && !this.gameOver) {
       this.boss.update(delta, time);
-
       this.updateBossHealth();
+
+      // ADD THIS: Animate boss red glow pulse
+      if (this.bossGlowMesh) {
+        this.bossGlowMesh.traverse((child) => {
+          if (child.isMesh && child.userData.glowShader) {
+            child.userData.glowShader.uniforms.time.value = time;
+          }
+        });
+      }
 
       if (this.boss.projectiles && this.boss.projectiles.length > 0) {
         this.checkPlayerHit();
@@ -414,6 +524,21 @@ export default class LobbyScene {
   async handleBossDefeat() {
     if (this.boss.defeatedHandled) return;
     this.boss.defeatedHandled = true;
+
+    // ADD THIS: Restore normal lighting
+    if (this.ambientLight && this.dirLight) {
+      this.ambientLight.intensity = 0.6;
+      this.dirLight.intensity = 0.7;
+      this.ambientLight.color.setHex(0xa89582);
+      this.dirLight.color.setHex(0xa89582);
+
+      if (this.lampLights && this.lampLights.length > 0) {
+        this.lampLights.forEach((light) => {
+          light.intensity = 1.0;
+          light.color.setHex(0xffffff);
+        });
+      }
+    }
 
     this.hud.showMessage("🎉 Victory! The Bellboy Ghost has been defeated!");
     this.player.exitCombat();
