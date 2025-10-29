@@ -188,8 +188,10 @@ async function init() {
         break;
       case "e":
       case "E":
-        // Use selected inventory item
-        if (currentScene.inventory) {
+        // Handle torch in bathroom scene or inventory in other scenes
+        if (currentScene.handleInteraction) {
+          currentScene.handleInteraction();
+        } else if (currentScene.inventory) {
           const selectedItem = currentScene.inventory.getSelectedItem();
           if (selectedItem && selectedItem.onUse) {
             selectedItem.onUse();
