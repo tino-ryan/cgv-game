@@ -128,10 +128,16 @@ export default class LobbyScene {
     // Snap camera to look at boss
     this.snapCameraToBoss();
 
-    // Create ONLY boss health bar (removed player health bar)
-    this.bossHealthFill = this.hud.createHealthBar("Bellboy Ghost", 50, "red");
+    // Create boss health bar using the dedicated method
+    this.hud.createBossHealthBar();
+    this.bossHealthFill = this.hud.bossHealthFill;
 
-    console.log("Boss health bar created:", this.bossHealthFill);
+    console.log("✅ Boss health bar created:", this.bossHealthFill);
+
+    // Ensure it starts at 100%
+    if (this.bossHealthFill) {
+      this.bossHealthFill.style.width = "100%";
+    }
 
     // Show boss introduction message
     this.hud.showMessage("The Bellboy Ghost has appeared! Defeat him!");
@@ -175,7 +181,7 @@ export default class LobbyScene {
       const distance = projectile.position.distanceTo(playerPos);
 
       if (distance < hitRadius) {
-        console.log("Player hit by boss projectile!");
+        console.log(`💥 Player hit by boss projectile! Distance: ${distance.toFixed(2)}`);
 
         // Remove projectile first
         this.scene.remove(projectile);

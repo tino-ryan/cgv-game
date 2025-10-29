@@ -181,9 +181,11 @@ async function init() {
         break;
       case "f":
       case "F":
-        // Pickup bell (only in lobby)
+        // Pickup bell (lobby scene) or toilet paper (bathroom scene)
         if (currentScene.serviceBell) {
           currentScene.pickupBell();
+        } else if (currentScene.handlePickup) {
+          currentScene.handlePickup();
         }
         break;
       case "e":

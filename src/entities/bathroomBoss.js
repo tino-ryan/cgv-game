@@ -27,7 +27,7 @@ export default class BathroomBoss {
     this.shootInterval = 1.5; // Faster shooting than bellboy
     
 
-    // Movement mechanics - moves along the wall
+    // Enhanced movement mechanics - random 3D movement
     this.isMoving = true;
     this.moveSpeed = 0.03;
     this.movementBounds = {
@@ -35,9 +35,21 @@ export default class BathroomBoss {
       maxX: 8,
       minY: 0.2,  // Lower bounds to avoid floor
       maxY: 2.5,  // Lower max to avoid ceiling
-      z: 8        // Fixed Z position along the wall
+      minZ: 5,    // Front boundary
+      maxZ: 10    // Back boundary (near wall)
     };
-    this.movementDirection = new THREE.Vector3(0, 1, 0); // Start moving up
+
+    // Random movement system
+    this.randomMovement = {
+      enabled: true,
+      changeDirectionTimer: 0,
+      changeDirectionInterval: 1.8, // Change direction every 1.8 seconds
+      currentDirection: new THREE.Vector3(
+        (Math.random() - 0.5) * 2,  // left/right
+        (Math.random() - 0.5) * 2,  // up/down
+        (Math.random() - 0.5) * 1   // forward/back (smaller range)
+      ).normalize()
+    };
 
     // Eyes glow effect
     this.eyeGlowIntensity = 2.0;
@@ -62,7 +74,7 @@ export default class BathroomBoss {
 
         // Scale and position the model - LOWERED TO AVOID CEILING
         this.bossModel.scale.set(0.8, 0.8, 0.8); // Smaller scale
-        this.bossModel.position.set(8, 0.5, this.movementBounds.z); // Much lower Y position
+        this.bossModel.position.set(6, 1.5, 8); // Position within bounds
 
         // Store the model's base rotation offset (adjust this value as needed)
         this.modelRotationOffset = -Math.PI / 2; // 90 degrees - adjust if model still faces wrong way
@@ -76,6 +88,7 @@ export default class BathroomBoss {
         this.setupGlowingEyes();
 
         // Make the model visible in reflections and raycast-able
+        this.bossModel.userData.isBoss = true; // Set on main model
         this.bossModel.traverse((child) => {
           if (child.isMesh) {
             child.userData.isBoss = true;
@@ -95,6 +108,10 @@ export default class BathroomBoss {
         console.log("🐐 Evil Goatee Boss loaded and positioned!");
         console.log("Boss position:", this.bossModel.position);
         console.log("Boss scale:", this.bossModel.scale);
+        console.log("Boss userData.isBoss:", this.bossModel.userData.isBoss);
+
+        // Debug: Check if boss is properly added to scene
+        window.debugBoss = this.bossModel;
 
         // Debug helper
         window.debugBossPosition = () => {
@@ -137,12 +154,23 @@ export default class BathroomBoss {
     });
 
     this.bossModel = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    this.bossModel.position.set(6, 0.5, this.movementBounds.z); // Lower fallback position too
+    this.bossModel.position.set(6, 1.5, 8); // Position within bounds
+    this.bossModel.userData.isBoss = true;
+
+    // Set up geometry for raycasting
+    if (this.bossModel.geometry) {
+      try {
+        if (!this.bossModel.geometry.boundingSphere) this.bossModel.geometry.computeBoundingSphere();
+        if (!this.bossModel.geometry.boundingBox) this.bossModel.geometry.computeBoundingBox();
+      } catch (e) {
+        // ignore geometry compute errors
+      }
+    }
+    this.bossModel.frustumCulled = false;
 
     // Add glowing eyes
     this.setupGlowingEyes();
 
-    this.bossModel.userData.isBoss = true;
     this.modelLoaded = true;
 
     this.scene.add(this.bossModel);
@@ -230,9 +258,13 @@ export default class BathroomBoss {
     const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
     projectile.userData.isProjectile = true;
 
-    // Position at boss location
+    // Position at boss center, elevated to roughly head/chest level
     projectile.position.copy(this.bossModel.position);
-    projectile.position.add(new THREE.Vector3(0, 0, -0.5)); // Slightly in front
+    projectile.position.y += 1.0; // Raise to roughly chest level of the boss
+
+    // Move projectile slightly toward player so it appears to come from boss front
+    const toPlayer = new THREE.Vector3().subVectors(this.player.ghost.position, this.bossModel.position).normalize();
+    projectile.position.add(toPlayer.multiplyScalar(0.5)); // Slightly toward player
 
     // Direction to player's ghost
     const targetPos = this.player.ghost.position.clone();
@@ -259,19 +291,34 @@ export default class BathroomBoss {
   takeDamage(amount) {
     if (!this.isAlive) return;
     this.health = Math.max(0, this.health - amount);
-    console.log(`Bathroom Boss took ${amount} dmg — ${this.health}/${this.maxHealth}`);
+    console.log(`🔥 Bathroom Boss took ${amount} damage! Health: ${this.health}/${this.maxHealth} (${Math.round((this.health/this.maxHealth)*100)}%)`);
 
     // Flash effect when taking damage
     if (this.bossModel) {
       this.bossModel.traverse((child) => {
         if (child.isMesh && child.material) {
           const originalColor = child.material.color.clone();
-          child.material.color.setHex(0xffffff);
+          child.material.color.setHex(0xff0000); // Flash red instead of white
           setTimeout(() => {
             child.material.color.copy(originalColor);
-          }, 100);
+          }, 150);
         }
       });
+
+      // Shake effect
+      const originalPosition = this.bossModel.position.clone();
+      const shakeAmount = 0.1;
+      this.bossModel.position.add(new THREE.Vector3(
+        (Math.random() - 0.5) * shakeAmount,
+        (Math.random() - 0.5) * shakeAmount,
+        (Math.random() - 0.5) * shakeAmount
+      ));
+
+      setTimeout(() => {
+        if (this.bossModel) {
+          this.bossModel.position.copy(originalPosition);
+        }
+      }, 150);
     }
 
     if (this.health <= 0) {
@@ -314,25 +361,49 @@ export default class BathroomBoss {
   updateMovement(delta) {
     if (!this.bossModel || !this.isAlive) return;
 
-    // Move along the wall in a pattern
-    const newPosition = this.bossModel.position.clone();
-    newPosition.add(this.movementDirection.clone().multiplyScalar(this.moveSpeed));
+    // Random movement system
+    if (this.randomMovement.enabled) {
+      // Update direction change timer
+      this.randomMovement.changeDirectionTimer -= delta;
 
-    // Check bounds and change direction
-    if (newPosition.y >= this.movementBounds.maxY || newPosition.y <= this.movementBounds.minY) {
-      this.movementDirection.y *= -1; // Reverse Y direction
-      this.movementDirection.x = (Math.random() - 0.5) * 0.5; // Add some X variation
+      if (this.randomMovement.changeDirectionTimer <= 0) {
+        // Choose new random direction
+        this.randomMovement.currentDirection = new THREE.Vector3(
+          (Math.random() - 0.5) * 2,  // left/right
+          (Math.random() - 0.5) * 2,  // up/down
+          (Math.random() - 0.5) * 1   // forward/back (smaller range)
+        ).normalize();
+
+        this.randomMovement.changeDirectionTimer = this.randomMovement.changeDirectionInterval;
+        console.log("🎲 Boss changed direction:", this.randomMovement.currentDirection);
+      }
+
+      // Calculate new position
+      const newPosition = this.bossModel.position.clone();
+      const movement = this.randomMovement.currentDirection.clone().multiplyScalar(this.moveSpeed);
+      newPosition.add(movement);
+
+      // Boundary checking with direction reversal
+      if (newPosition.x >= this.movementBounds.maxX || newPosition.x <= this.movementBounds.minX) {
+        this.randomMovement.currentDirection.x *= -1;
+        newPosition.x = THREE.MathUtils.clamp(newPosition.x, this.movementBounds.minX, this.movementBounds.maxX);
+      }
+
+      if (newPosition.y >= this.movementBounds.maxY || newPosition.y <= this.movementBounds.minY) {
+        this.randomMovement.currentDirection.y *= -1;
+        newPosition.y = THREE.MathUtils.clamp(newPosition.y, this.movementBounds.minY, this.movementBounds.maxY);
+      }
+
+      if (newPosition.z >= this.movementBounds.maxZ || newPosition.z <= this.movementBounds.minZ) {
+        this.randomMovement.currentDirection.z *= -1;
+        newPosition.z = THREE.MathUtils.clamp(newPosition.z, this.movementBounds.minZ, this.movementBounds.maxZ);
+      }
+
+      // Apply movement
+      this.bossModel.position.copy(newPosition);
     }
-
-    if (newPosition.x >= this.movementBounds.maxX || newPosition.x <= this.movementBounds.minX) {
-      this.movementDirection.x *= -1; // Reverse X direction
-    }
-
-    // Apply movement
-    this.bossModel.position.copy(newPosition);
 
     // Face the player while maintaining model's correct orientation
-
     if (this.player && this.player.ghost) {
       const playerPos = this.player.ghost.position;
       const bossPos = this.bossModel.position;

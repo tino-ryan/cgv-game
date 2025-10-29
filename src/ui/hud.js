@@ -85,42 +85,45 @@ export default class HUD {
   }
 
   // Boss Health Bar (specific implementation)
-  createBossHealthBar() {
+  createBossHealthBar(labelText = "Bellboy Ghost") {
     this.bossHealthBar = document.createElement("div");
-    this.bossHealthBar.style.position = "absolute";
+    this.bossHealthBar.style.position = "fixed"; // Changed to fixed
     this.bossHealthBar.style.top = "30px";
     this.bossHealthBar.style.left = "50%";
     this.bossHealthBar.style.transform = "translateX(-50%)";
     this.bossHealthBar.style.width = "300px";
-    this.bossHealthBar.style.height = "24px";
+    this.bossHealthBar.style.height = "30px"; // Slightly taller
     this.bossHealthBar.style.border = "2px solid white";
-    this.bossHealthBar.style.background = "rgba(0,0,0,0.5)";
-    this.bossHealthBar.style.textAlign = "center";
-    this.bossHealthBar.style.position = "relative";
+    this.bossHealthBar.style.background = "rgba(0,0,0,0.8)"; // More opaque
+    this.bossHealthBar.style.borderRadius = "5px";
+    this.bossHealthBar.style.zIndex = "9990"; // High z-index to ensure visibility
 
     this.bossHealthFill = document.createElement("div");
     this.bossHealthFill.style.height = "100%";
     this.bossHealthFill.style.width = "100%";
-    this.bossHealthFill.style.background = "red";
+    this.bossHealthFill.style.background = "linear-gradient(90deg, #ff0000, #cc0000)"; // Gradient
     this.bossHealthFill.style.transition = "width 0.3s";
+    this.bossHealthFill.style.borderRadius = "3px";
     this.bossHealthBar.appendChild(this.bossHealthFill);
 
     // Boss label
     const label = document.createElement("span");
-    label.innerText = "Bellboy Ghost";
+    label.innerText = labelText;
     label.style.position = "absolute";
     label.style.left = "0";
     label.style.top = "0";
     label.style.width = "100%";
     label.style.height = "100%";
     label.style.textAlign = "center";
-    label.style.lineHeight = "24px";
+    label.style.lineHeight = "30px"; // Match height
     label.style.color = "white";
     label.style.fontWeight = "bold";
-    label.style.textShadow = "1px 1px 2px black";
+    label.style.textShadow = "2px 2px 4px black";
+    label.style.fontSize = "14px";
     this.bossHealthBar.appendChild(label);
 
     document.body.appendChild(this.bossHealthBar);
+    console.log("✅ Boss health bar added to DOM with label:", labelText);
   }
 
   updateBossHealth(percent) {

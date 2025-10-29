@@ -3,6 +3,7 @@ import Player from "../entities/player.js";
 import HUD from "../ui/hud.js";
 import PhysicsSystem from "../systems/physics.js";
 import BathroomBoss from "../entities/bathroomBoss.js";
+import Inventory from "../systems/inventory.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export default class BathroomScene {
@@ -16,6 +17,9 @@ export default class BathroomScene {
     // Initialize physics system
     this.physics = new PhysicsSystem(this.scene);
 
+    // Initialize inventory system
+    this.inventory = new Inventory(null);
+
     this.bathroomModel = null;
     this.mirror = null;
     this.mirrorCamera = null;
@@ -24,10 +28,15 @@ export default class BathroomScene {
     // Boss and game state
     this.boss = null;
     this.bossSpawned = false;
+    this.bossHealthFill = null;
     this.torchEnabled = false;
     this.torchLight = null;
     this.hitByProjectile = false;
     this.showTorchPrompt = false;
+
+    // Toilet paper pickup
+    this.toiletPaper = null;
+    this.pickupPromptShown = false;
 
     this.loadBathroomEnvironment();
 
@@ -70,9 +79,6 @@ export default class BathroomScene {
     // Player
     this.player = new Player(this.scene, this.camera, this.hud);
 
-    // CRITICAL: Enter combat mode for first-person view
-    this.player.enterCombat();
-
     this.camera.position.y = 2.5; // <-- higher up
 
     this.player.loadGhost("/public/assets/models/mainchar.glb").then(() => {
@@ -87,19 +93,14 @@ export default class BathroomScene {
       }
     });
 
-    // Load gun and attach to camera
+    // Load gun first, then enter combat mode
     this.player.loadGun("/public/assets/models/gun.glb").then(() => {
       if (this.player.gun) {
-        this.player.gun.visible = true;
+        console.log("✅ Gun loaded for bathroom scene");
 
-        // Attach gun to camera so it moves with view
-        this.camera.add(this.player.gun);
-
-        // Adjust gun position relative to camera
-        this.player.gun.position.set(0.6, -0.4, -0.8); // tweak as needed
-        this.gun.rotation.set(-Math.PI / 1, 0, 3);
-
-        console.log("✅ Gun loaded and attached to camera");
+        // NOW enter combat mode after gun is loaded
+        this.player.enterCombat();
+        console.log("✅ Entered combat mode with gun ready");
       }
     });
 
@@ -152,6 +153,10 @@ export default class BathroomScene {
     this.boss = new BathroomBoss(this.scene, this.player, this.hud, this.physics);
     this.bossSpawned = true;
 
+    // Store boss reference in scene for player shooting system
+    this.scene.userData.boss = this.boss;
+    this.scene.userData.bathroomScene = this;
+
     // Start the sequence after a short delay
     setTimeout(() => {
       this.startBossFight();
@@ -160,6 +165,17 @@ export default class BathroomScene {
 
   startBossFight() {
     console.log("🔥 Boss fight started!");
+
+    // Create boss health bar with custom label
+    this.hud.createBossHealthBar("Evil Goatee");
+    this.bossHealthFill = this.hud.bossHealthFill;
+
+    console.log("✅ Bathroom boss health bar created:", this.bossHealthFill);
+
+    // Ensure it starts at 100%
+    if (this.bossHealthFill) {
+      this.bossHealthFill.style.width = "100%";
+    }
 
     // Immediately shoot a projectile at the player to trigger the sequence
     setTimeout(() => {
@@ -221,26 +237,74 @@ export default class BathroomScene {
   }
 
   handleProjectileHit() {
+    // Player takes damage using the proper takeDamage method
+    if (this.player && this.player.takeDamage) {
+      this.player.takeDamage(1);
+      console.log(`💔 Player took damage! Health: ${this.player.health.current}/${this.player.health.max}`);
+
+      // Check if player died
+      if (this.player.health.current <= 0) {
+        this.handlePlayerDefeat();
+        return;
+      }
+    }
+
+    // Visual feedback - flash screen red
+    const flashDiv = document.createElement("div");
+    flashDiv.style.position = "fixed";
+    flashDiv.style.top = "0";
+    flashDiv.style.left = "0";
+    flashDiv.style.width = "100%";
+    flashDiv.style.height = "100%";
+    flashDiv.style.background = "rgba(255, 0, 0, 0.3)";
+    flashDiv.style.pointerEvents = "none";
+    flashDiv.style.zIndex = "9999";
+    document.body.appendChild(flashDiv);
+
+    setTimeout(() => {
+      if (flashDiv.parentElement) {
+        document.body.removeChild(flashDiv);
+      }
+    }, 200);
+
+    // Show torch prompt only once
     if (!this.hitByProjectile) {
       this.hitByProjectile = true;
-
-      // Player takes damage
-      if (this.player && this.player.health) {
-        this.player.health.takeDamage(1);
-      }
-
-      // Show torch prompt
       this.showTorchPrompt = true;
       this.torchPromptElement.style.display = "block";
-
       console.log("💔 Player hit by projectile! Show torch prompt.");
     }
   }
 
-  // Handle E key press for torch
+  // Handle E key press for torch and inventory
   handleInteraction() {
+    console.log("🔧 E key pressed in bathroom scene");
+
+    // First check torch interaction
     if (this.showTorchPrompt && !this.torchEnabled) {
+      console.log("🔦 Toggling torch");
       this.toggleTorch();
+      return;
+    }
+
+    // If no torch interaction, check inventory
+    console.log("📦 Checking inventory, inventory exists:", !!this.inventory);
+    if (this.inventory) {
+      const selectedItem = this.inventory.getSelectedItem();
+      console.log("📦 Selected item:", selectedItem);
+      if (selectedItem && selectedItem.onUse) {
+        console.log("🧻 Using selected item:", selectedItem.name);
+        selectedItem.onUse();
+      } else {
+        console.log("❌ No selected item or no onUse function");
+      }
+    }
+  }
+
+  // Handle F key press for toilet paper pickup
+  handlePickup() {
+    if (this.toiletPaper && this.pickupPromptShown) {
+      this.pickupToiletPaper();
     }
   }
 
@@ -518,10 +582,16 @@ export default class BathroomScene {
       this.player.update();
     }
 
-    // Update boss
-    if (this.boss && this.boss.isAlive) {
+    // Update boss (only if game is not over)
+    if (!this.gameOver && this.boss && this.boss.isAlive) {
       this.boss.update(safeDelta, time);
       this.checkProjectileCollisions();
+
+      // Update boss health bar
+      this.updateBossHealth();
+    } else if (!this.gameOver && this.boss && !this.boss.isAlive && this.boss.defeated && !this.boss.defeatedHandled) {
+      // Handle boss defeat
+      this.handleBossDefeat();
     }
 
     // Update torch light direction
@@ -530,6 +600,17 @@ export default class BathroomScene {
       const direction = new THREE.Vector3(0, 0, -1);
       direction.applyQuaternion(this.camera.quaternion);
       this.torchLight.target.position.copy(this.camera.position).add(direction.multiplyScalar(10));
+    }
+
+    // Animate toilet paper and check for pickup
+    if (this.toiletPaper) {
+      // Floating animation
+      this.toiletPaper.userData.floatOffset += safeDelta * 2;
+      this.toiletPaper.position.y = 1.0 + Math.sin(this.toiletPaper.userData.floatOffset) * 0.2;
+      this.toiletPaper.rotation.y += safeDelta;
+
+      // Check if player is nearby
+      this.checkToiletPaperPickup();
     }
 
     // Update mirror reflection
@@ -545,6 +626,8 @@ export default class BathroomScene {
     this.boss.projectiles.forEach((projectile, index) => {
       const distance = projectile.position.distanceTo(this.player.ghost.position);
       if (distance < 1.0) { // Hit detection radius
+        console.log(`💥 Player hit by bathroom boss projectile! Distance: ${distance.toFixed(2)}`);
+
         // Remove the projectile
         this.scene.remove(projectile);
         this.boss.projectiles.splice(index, 1);
@@ -553,6 +636,497 @@ export default class BathroomScene {
         this.handleProjectileHit();
       }
     });
+  }
+
+  showHitMarker() {
+    // Don't show hit marker if game is over
+    if (this.gameOver) return;
+
+    // Create hit marker (X in center of screen)
+    const marker = document.createElement("div");
+    marker.style.position = "fixed";
+    marker.style.top = "50%";
+    marker.style.left = "50%";
+    marker.style.transform = "translate(-50%, -50%)";
+    marker.style.color = "#ff0000";
+    marker.style.fontSize = "48px";
+    marker.style.fontWeight = "bold";
+    marker.style.textShadow = "2px 2px 4px black";
+    marker.style.pointerEvents = "none";
+    marker.style.zIndex = "9998";
+    marker.textContent = "X";
+    document.body.appendChild(marker);
+
+    // Fade out and remove
+    setTimeout(() => {
+      marker.style.transition = "opacity 0.3s";
+      marker.style.opacity = "0";
+      setTimeout(() => {
+        if (marker.parentElement) {
+          document.body.removeChild(marker);
+        }
+      }, 300);
+    }, 100);
+  }
+
+  updateBossHealth() {
+    if (this.bossHealthFill && this.boss) {
+      const healthPercent = (this.boss.health / this.boss.maxHealth) * 100;
+      this.bossHealthFill.style.width = healthPercent + "%";
+    }
+  }
+
+  handlePlayerDefeat() {
+    if (this.gameOver) return;
+
+    this.gameOver = true;
+    console.log("💀 Game Over - Player Defeated in Bathroom");
+
+    // Disable player shooting
+    this.player.combatMode = false;
+
+    // Stop boss from shooting and remove all projectiles
+    if (this.boss) {
+      this.boss.isAlive = false;
+      // Remove all remaining projectiles immediately
+      if (this.boss.projectiles) {
+        this.boss.projectiles.forEach((proj) => {
+          try {
+            this.scene.remove(proj);
+          } catch (e) {}
+        });
+        this.boss.projectiles = [];
+      }
+    }
+
+    // Clean up boss health bar immediately
+    this.hud.removeBossHealthBar();
+    this.bossHealthFill = null;
+
+    // Exit pointer lock
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+
+    // Show Game Over screen after a brief delay
+    setTimeout(() => {
+      this.showGameOverScreen();
+    }, 500);
+  }
+
+  showGameOverScreen() {
+    // Create overlay
+    const overlay = document.createElement("div");
+    overlay.id = "bathroom-game-over-overlay";
+    overlay.style.position = "fixed";
+    overlay.style.top = "0";
+    overlay.style.left = "0";
+    overlay.style.width = "100%";
+    overlay.style.height = "100%";
+    overlay.style.background = "rgba(0, 0, 0, 0.8)";
+    overlay.style.display = "flex";
+    overlay.style.flexDirection = "column";
+    overlay.style.justifyContent = "center";
+    overlay.style.alignItems = "center";
+    overlay.style.zIndex = "10000";
+    overlay.style.fontFamily = "Arial, sans-serif";
+
+    // Game Over text
+    const title = document.createElement("h1");
+    title.textContent = "GAME OVER";
+    title.style.color = "#ff0000";
+    title.style.fontSize = "72px";
+    title.style.marginBottom = "20px";
+    title.style.textShadow = "4px 4px 8px black";
+    overlay.appendChild(title);
+
+    // Subtitle
+    const subtitle = document.createElement("p");
+    subtitle.textContent = "The Evil Goatee was too powerful...";
+    subtitle.style.color = "white";
+    subtitle.style.fontSize = "24px";
+    subtitle.style.marginBottom = "40px";
+    overlay.appendChild(subtitle);
+
+    // Button container
+    const buttonContainer = document.createElement("div");
+    buttonContainer.style.display = "flex";
+    buttonContainer.style.gap = "20px";
+
+    // Restart button
+    const restartBtn = document.createElement("button");
+    restartBtn.textContent = "RESTART";
+    restartBtn.style.padding = "15px 40px";
+    restartBtn.style.fontSize = "24px";
+    restartBtn.style.fontWeight = "bold";
+    restartBtn.style.color = "white";
+    restartBtn.style.background = "#ff0000";
+    restartBtn.style.border = "3px solid white";
+    restartBtn.style.borderRadius = "10px";
+    restartBtn.style.cursor = "pointer";
+    restartBtn.style.transition = "all 0.3s";
+
+    restartBtn.onmouseover = () => {
+      restartBtn.style.background = "#cc0000";
+      restartBtn.style.transform = "scale(1.1)";
+    };
+
+    restartBtn.onmouseout = () => {
+      restartBtn.style.background = "#ff0000";
+      restartBtn.style.transform = "scale(1)";
+    };
+
+    restartBtn.onclick = () => {
+      this.restartGame();
+    };
+
+    // Main Menu button
+    const mainMenuBtn = document.createElement("button");
+    mainMenuBtn.textContent = "MAIN MENU";
+    mainMenuBtn.style.padding = "15px 40px";
+    mainMenuBtn.style.fontSize = "24px";
+    mainMenuBtn.style.fontWeight = "bold";
+    mainMenuBtn.style.color = "white";
+    mainMenuBtn.style.background = "#333333";
+    mainMenuBtn.style.border = "3px solid white";
+    mainMenuBtn.style.borderRadius = "10px";
+    mainMenuBtn.style.cursor = "pointer";
+    mainMenuBtn.style.transition = "all 0.3s";
+
+    mainMenuBtn.onmouseover = () => {
+      mainMenuBtn.style.background = "#555555";
+      mainMenuBtn.style.transform = "scale(1.1)";
+    };
+
+    mainMenuBtn.onmouseout = () => {
+      mainMenuBtn.style.background = "#333333";
+      mainMenuBtn.style.transform = "scale(1)";
+    };
+
+    mainMenuBtn.onclick = () => {
+      this.goToMainMenu();
+    };
+
+    buttonContainer.appendChild(restartBtn);
+    buttonContainer.appendChild(mainMenuBtn);
+    overlay.appendChild(buttonContainer);
+    document.body.appendChild(overlay);
+  }
+
+  restartGame() {
+    console.log("Restarting bathroom boss fight...");
+
+    // Remove game over overlay
+    const overlay = document.getElementById("bathroom-game-over-overlay");
+    if (overlay) {
+      document.body.removeChild(overlay);
+    }
+
+    // Reset game state
+    this.gameOver = false;
+    this.hitByProjectile = false;
+    this.showTorchPrompt = false;
+    this.torchEnabled = false;
+    this.torchLight.visible = false;
+    this.torchPromptElement.style.display = "none";
+    this.ambientLight.intensity = 0.1;
+
+    // Remove old boss if it exists
+    if (this.boss && this.boss.bossModel) {
+      this.scene.remove(this.boss.bossModel);
+    }
+
+    // Reset player health
+    this.player.health.current = this.player.health.max;
+    this.player._isDead = false;
+    if (this.player.hud) {
+      this.player.hud.updatePlayerHearts(
+        this.player.health.current,
+        this.player.health.max
+      );
+    }
+
+    // Respawn the boss
+    this.boss = null;
+    this.bossSpawned = false;
+    this.spawnBoss();
+  }
+
+  goToMainMenu() {
+    console.log("Going to main menu...");
+
+    // Remove game over overlay
+    const overlay = document.getElementById("bathroom-game-over-overlay");
+    if (overlay) {
+      document.body.removeChild(overlay);
+    }
+
+    // Clean up boss health bar
+    this.hud.removeBossHealthBar();
+
+    // Reload the page to go back to main menu
+    window.location.reload();
+  }
+
+  handleBossDefeat() {
+    if (this.boss.defeatedHandled) return;
+    this.boss.defeatedHandled = true;
+
+    console.log("🎉 Bathroom Boss defeated!");
+
+    // Clean up boss health bar
+    this.hud.removeBossHealthBar();
+    this.bossHealthFill = null;
+
+    // Show victory message
+    const victoryMessage = document.createElement("div");
+    victoryMessage.innerHTML = "🎉 Victory! The Evil Goatee has been defeated!";
+    victoryMessage.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #00ff00;
+      font-size: 32px;
+      font-weight: bold;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      z-index: 10000;
+      text-align: center;
+    `;
+    document.body.appendChild(victoryMessage);
+
+    // Wait a short delay before dropping toilet paper
+    setTimeout(() => {
+      if (victoryMessage.parentElement) {
+        document.body.removeChild(victoryMessage);
+      }
+
+      // Drop the toilet paper at boss location
+      this.dropToiletPaper(this.boss.bossModel.position);
+
+      // Show pickup message
+      setTimeout(() => {
+        this.hud.showMessage("Mysterious toilet paper has appeared... Pick it up!");
+      }, 1000);
+    }, 3000);
+  }
+
+  async dropToiletPaper(position) {
+    const loader = new GLTFLoader();
+
+    try {
+      console.log("Loading toilet paper...");
+      const gltf = await loader.loadAsync("/assets/models/simple_toilet_paper_2.0.glb");
+
+      this.toiletPaper = gltf.scene;
+      this.toiletPaper.position.copy(position);
+      this.toiletPaper.position.y = 1.0; // Float at pickup height
+      this.toiletPaper.scale.set(0.5, 0.5, 0.5); // Smaller scale
+      this.toiletPaper.userData.isPickup = true;
+      this.toiletPaper.userData.itemName = "Toilet Paper";
+
+      this.scene.add(this.toiletPaper);
+
+      // Add floating animation
+      this.toiletPaper.userData.floatOffset = 0;
+
+      console.log("Toilet paper dropped at", position);
+    } catch (err) {
+      console.error("Failed to load toilet paper model:", err);
+
+      // Fallback: Create simple toilet paper geometry
+      this.createFallbackToiletPaper(position);
+    }
+  }
+
+  createFallbackToiletPaper(position) {
+    const geometry = new THREE.CylinderGeometry(0.3, 0.3, 0.8, 16);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      metalness: 0.1,
+      roughness: 0.8,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.2,
+    });
+
+    this.toiletPaper = new THREE.Mesh(geometry, material);
+    this.toiletPaper.position.copy(position);
+    this.toiletPaper.position.y = 1.0;
+    this.toiletPaper.userData.isPickup = true;
+    this.toiletPaper.userData.itemName = "Toilet Paper";
+    this.toiletPaper.userData.floatOffset = 0;
+
+    this.scene.add(this.toiletPaper);
+    console.log("Created fallback toilet paper");
+  }
+
+  checkToiletPaperPickup() {
+    if (!this.toiletPaper || !this.player.ghost) return;
+
+    const distance = this.player.ghost.position.distanceTo(this.toiletPaper.position);
+
+    if (distance < 2.0) {
+      // Show pickup prompt
+      if (!this.pickupPromptShown) {
+        this.showPickupPrompt();
+        this.pickupPromptShown = true;
+      }
+    } else {
+      this.hidePickupPrompt();
+      this.pickupPromptShown = false;
+    }
+  }
+
+  showPickupPrompt() {
+    if (document.getElementById("pickup-prompt")) return;
+
+    const prompt = document.createElement("div");
+    prompt.id = "pickup-prompt";
+    prompt.style.position = "fixed";
+    prompt.style.top = "50%";
+    prompt.style.left = "50%";
+    prompt.style.transform = "translate(-50%, -50%)";
+    prompt.style.background = "rgba(0, 0, 0, 0.8)";
+    prompt.style.color = "white";
+    prompt.style.padding = "15px 30px";
+    prompt.style.borderRadius = "10px";
+    prompt.style.fontSize = "20px";
+    prompt.style.fontWeight = "bold";
+    prompt.style.border = "2px solid white";
+    prompt.style.zIndex = "10000";
+    prompt.textContent = "Press F to pick up Toilet Paper";
+    document.body.appendChild(prompt);
+  }
+
+  hidePickupPrompt() {
+    const prompt = document.getElementById("pickup-prompt");
+    if (prompt) {
+      prompt.remove();
+    }
+  }
+
+  pickupToiletPaper() {
+    if (!this.toiletPaper) return;
+
+    console.log("Picking up toilet paper...");
+
+    // Generate icon from 3D model
+    const iconUrl = this.generateToiletPaperIcon();
+
+    // Remove toilet paper from scene
+    this.scene.remove(this.toiletPaper);
+
+    // Add to inventory
+    const toiletPaperItem = {
+      name: "Toilet Paper",
+      description: "Premium toilet paper that will restore the bathroom to its former glory.",
+      icon: iconUrl,
+      iconEmoji: "🧻", // Fallback emoji
+      onUse: () => this.useToiletPaper(),
+    };
+
+    this.inventory.addItem(toiletPaperItem);
+    this.hidePickupPrompt();
+    this.toiletPaper = null;
+
+    this.hud.showMessage(
+      "Obtained Toilet Paper! Select it in your inventory and press E to use."
+    );
+  }
+
+  generateToiletPaperIcon() {
+    // Create a small offscreen renderer for the icon
+    const iconSize = 128;
+    const iconRenderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      preserveDrawingBuffer: true,
+    });
+    iconRenderer.setSize(iconSize, iconSize);
+    iconRenderer.setClearColor(0x000000, 0);
+
+    // Create camera for icon
+    const iconCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    iconCamera.position.set(2, 2, 2);
+    iconCamera.lookAt(0, 0, 0);
+
+    // Create temporary scene with toilet paper
+    const iconScene = new THREE.Scene();
+
+    // Add lighting
+    const light1 = new THREE.DirectionalLight(0xffffff, 1);
+    light1.position.set(1, 1, 1);
+    iconScene.add(light1);
+    const light2 = new THREE.AmbientLight(0xffffff, 0.5);
+    iconScene.add(light2);
+
+    // Clone the toilet paper model
+    const toiletPaperClone = this.toiletPaper.clone();
+    toiletPaperClone.position.set(0, 0, 0);
+
+    // Scale to fit icon
+    const box = new THREE.Box3().setFromObject(toiletPaperClone);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 1.5 / maxDim;
+    toiletPaperClone.scale.multiplyScalar(scale);
+
+    iconScene.add(toiletPaperClone);
+
+    // Render to canvas
+    iconRenderer.render(iconScene, iconCamera);
+
+    // Get data URL
+    const iconDataUrl = iconRenderer.domElement.toDataURL("image/png");
+
+    // Cleanup
+    iconRenderer.dispose();
+
+    return iconDataUrl;
+  }
+
+  async useToiletPaper() {
+    console.log("🧻 Using toilet paper...");
+
+    this.hud.showMessage("🧻 *Rustle rustle* The bathroom is being restored...");
+
+    // Wait a moment
+    await this.sleep(2000);
+
+    // Transform the bathroom - turn on lights!
+    this.transformBathroom();
+
+    // Update message
+    setTimeout(() => {
+      this.hud.showMessage("The bathroom has been restored! The lights are now on!");
+    }, 1000);
+  }
+
+  transformBathroom() {
+    console.log("✨ Transforming bathroom - turning on lights!");
+
+    // Brighten the ambient lighting significantly
+    this.ambientLight.intensity = 0.8; // Much brighter
+    this.directionalLight.intensity = 1.2; // Brighter directional light
+
+    // Add warm bathroom lighting
+    const warmLight = new THREE.PointLight(0xfff4da, 2, 30);
+    warmLight.position.set(0, 8, 8); // Above the bathroom
+    this.scene.add(warmLight);
+
+    // Add another light for better coverage
+    const warmLight2 = new THREE.PointLight(0xfff4da, 1.5, 25);
+    warmLight2.position.set(5, 6, 5);
+    this.scene.add(warmLight2);
+
+    // Change background to a lighter color
+    this.scene.background = new THREE.Color(0x2a2a2a);
+
+    console.log("💡 Bathroom lights turned on!");
+  }
+
+  sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   update() {

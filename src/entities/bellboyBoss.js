@@ -34,6 +34,21 @@ export default class BellboyBoss {
     this.minDistance = 5;
     this.chaseMessageShown = false;
 
+    // Random movement
+    this.randomMovement = {
+      enabled: true,
+      speed: 0.02,
+      changeDirectionTimer: 0,
+      changeDirectionInterval: 2, // seconds
+      currentDirection: new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2,
+        0
+      ).normalize(),
+      boundaryMin: { x: -15, y: 1, z: -15 },
+      boundaryMax: { x: 15, y: 4, z: -5 }
+    };
+
     // GLTF Loader for projectile models
     this.gltfLoader = new GLTFLoader();
     this.projectileModels = [];
@@ -291,14 +306,26 @@ export default class BellboyBoss {
   takeDamage(amount) {
     if (!this.isAlive) return;
     this.health = Math.max(0, this.health - amount);
-    console.log(`Boss took ${amount} dmg — ${this.health}/${this.maxHealth}`);
-    
+    console.log(`🔥 Boss took ${amount} damage! Health: ${this.health}/${this.maxHealth} (${Math.round((this.health/this.maxHealth)*100)}%)`);
+
+    // Flash red when hit
+    if (this.mesh && this.mesh.material) {
+      const originalColor = this.mesh.material.color.clone();
+      this.mesh.material.color.setHex(0xff0000);
+      setTimeout(() => {
+        if (this.mesh && this.mesh.material) {
+          this.mesh.material.color.copy(originalColor);
+        }
+      }, 100);
+    }
+
     // Start chasing when health drops below 50%
     if (this.health < this.maxHealth * 0.5 && !this.isChasing) {
       this.isChasing = true;
+      this.randomMovement.enabled = false; // Disable random movement when chasing
       console.log("⚠️ Boss is now chasing the player!");
     }
-    
+
     if (this.health <= 0) {
       this.die();
     }
@@ -349,8 +376,9 @@ export default class BellboyBoss {
 
     if (this.mesh) {
       // Hovering animation - ADJUSTED for new size
-      this.mesh.position.y = 2.0 + Math.sin(time * 2) * 0.3;
-      
+      const baseY = 2.0;
+      this.mesh.position.y = baseY + Math.sin(time * 2) * 0.3;
+
       // Chase player if health is below 50%
       if (this.isChasing && this.player && this.player.ghost) {
         const playerPos = this.player.ghost.position.clone();
@@ -359,18 +387,18 @@ export default class BellboyBoss {
         playerPos.y = 0;
         bossPos.y = 0;
         const distance = bossPos.distanceTo(playerPos);
-        
+
         // Calculate direction to player (only on XZ plane)
         const direction = new THREE.Vector3()
           .subVectors(this.player.ghost.position, this.mesh.position)
           .normalize();
         direction.y = 0;
-        
+
         // Only move if not within minimum distance
         if (distance > this.minDistance) {
           this.mesh.position.x += direction.x * this.chaseSpeed;
           this.mesh.position.z += direction.z * this.chaseSpeed;
-          
+
           // Face the player
           const lookPos = this.player.ghost.position.clone();
           this.mesh.lookAt(lookPos.x, this.mesh.position.y, lookPos.z);
@@ -380,6 +408,51 @@ export default class BellboyBoss {
           this.mesh.position.z -= direction.z * this.chaseSpeed * 0.5;
         }
       } else {
+        // Random movement when not chasing
+        if (this.randomMovement.enabled) {
+          // Update timer for direction changes
+          this.randomMovement.changeDirectionTimer -= delta;
+
+          if (this.randomMovement.changeDirectionTimer <= 0) {
+            // Choose new random direction (left/right, up/down, but no forward/back movement toward player)
+            this.randomMovement.currentDirection = new THREE.Vector3(
+              (Math.random() - 0.5) * 2, // left/right
+              (Math.random() - 0.5) * 2, // up/down
+              (Math.random() - 0.5) * 0.5 // minimal forward/back
+            ).normalize();
+
+            this.randomMovement.changeDirectionTimer = this.randomMovement.changeDirectionInterval;
+          }
+
+          // Apply movement with boundary checking
+          const newX = this.mesh.position.x + this.randomMovement.currentDirection.x * this.randomMovement.speed;
+          const newY = baseY + this.randomMovement.currentDirection.y * this.randomMovement.speed;
+          const newZ = this.mesh.position.z + this.randomMovement.currentDirection.z * this.randomMovement.speed;
+
+          // Boundary checking
+          if (newX >= this.randomMovement.boundaryMin.x && newX <= this.randomMovement.boundaryMax.x) {
+            this.mesh.position.x = newX;
+          } else {
+            // Reverse X direction when hitting boundary
+            this.randomMovement.currentDirection.x *= -1;
+          }
+
+          if (newY >= this.randomMovement.boundaryMin.y && newY <= this.randomMovement.boundaryMax.y) {
+            // For Y movement, we override the hover animation temporarily
+            this.mesh.position.y = newY + Math.sin(time * 2) * 0.1; // smaller hover when moving
+          } else {
+            // Reverse Y direction when hitting boundary
+            this.randomMovement.currentDirection.y *= -1;
+          }
+
+          if (newZ >= this.randomMovement.boundaryMin.z && newZ <= this.randomMovement.boundaryMax.z) {
+            this.mesh.position.z = newZ;
+          } else {
+            // Reverse Z direction when hitting boundary
+            this.randomMovement.currentDirection.z *= -1;
+          }
+        }
+
         // Normal rotation when not chasing
         this.mesh.rotation.y += 0.01;
       }
