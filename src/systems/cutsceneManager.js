@@ -47,22 +47,36 @@ export default class CutsceneManager {
   }
 
   async showScene({ image, text }) {
-    // 🧹 Reset between scenes
-    this.imageElement.src = image || "";
-    this.textElement.textContent = "";
+  this.imageElement.src = image;
+  this.textElement.textContent = "";
 
-    for (let i = 0; i < text.length; i++) {
-      this.textElement.textContent = text.substring(0, i + 1);
-      await new Promise((r) => setTimeout(r, 35)); // typing speed
+  let skip = false;
+
+  // When clicked, skip typing
+  const skipTyping = () => (skip = true);
+  window.addEventListener("click", skipTyping);
+
+  // Typewriter effect
+  for (let i = 0; i < text.length; i++) {
+    if (skip) {
+      this.textElement.textContent = text;
+      break;
     }
-
-    // Wait for a click to continue
-    await new Promise((r) => {
-      const next = () => {
-        window.removeEventListener("click", next);
-        r();
-      };
-      window.addEventListener("click", next);
-    });
+    this.textElement.textContent = text.substring(0, i + 1);
+    await new Promise((r) => setTimeout(r, 35));
   }
+
+  // Remove skip listener (so next click won't interfere)
+  window.removeEventListener("click", skipTyping);
+
+  // Now wait for *another* click to move to next scene
+  await new Promise((r) => {
+    const next = () => {
+      window.removeEventListener("click", next);
+      r();
+    };
+    window.addEventListener("click", next);
+  });
+}
+
 }

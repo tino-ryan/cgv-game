@@ -146,7 +146,7 @@ export default class TitleMenu {
     Object.assign(creditsText.style, {
       textAlign: "center",
       whiteSpace: "pre-line",
-      animation: "scroll-up 20s linear forwards",
+      animation: "scroll-up 40s linear forwards",
     });
 
     creditsOverlay.appendChild(creditsText);
