@@ -150,7 +150,7 @@ export default class Player {
     }
   }
 
-  shoot() {
+shoot() {
     if (!this.canShoot) return;
     this.canShoot = false;
 
@@ -158,7 +158,7 @@ export default class Player {
       this.canShoot = true;
     }, this.shootCooldown);
 
-    // Get gun position - FIXED to match original method
+    // Get gun position
     const gunPosition = new THREE.Vector3();
     this.gun.getWorldPosition(gunPosition);
 
@@ -181,6 +181,11 @@ export default class Player {
     // Add bathroom boss if it exists
     if (window.bathroomScene?.boss?.mesh) {
       targets.push(window.bathroomScene.boss.mesh);
+    }
+    
+    // Add kitchen boss if it exists
+    if (window.kitchenScene?.kitchenGhost?.mesh) {
+      targets.push(window.kitchenScene.kitchenGhost.mesh);
     }
     
     // Add tutorial objects if in tutorial
@@ -225,6 +230,14 @@ export default class Player {
             window.bathroomScene.showHitMarker();
           }
         }
+        
+        // Handle kitchen boss
+        if (window.kitchenScene?.kitchenGhost && targetObject === window.kitchenScene.kitchenGhost.mesh) {
+          window.kitchenScene.kitchenGhost.takeDamage(10);
+          if (window.kitchenScene.showHitMarker) {
+            window.kitchenScene.showHitMarker();
+          }
+        }
       } 
       else if (targetObject.userData.isEnemy || targetObject.userData.isSuspicious) {
         console.log("💀 Tutorial object hit!");
@@ -250,7 +263,7 @@ export default class Player {
       tracerEnd.copy(gunPosition).add(direction.clone().multiplyScalar(50));
     }
 
-    // Create visual tracer - FIXED to match original
+    // Create visual tracer
     const geometry = new THREE.BufferGeometry().setFromPoints([
       gunPosition.clone(),
       tracerEnd
@@ -286,18 +299,24 @@ export default class Player {
     }
   }
 
-  onDeath() {
-    // Only trigger death once
-    if (this._isDead) return;
-    this._isDead = true;
-    
-    console.log("💀 Player defeated!");
-    
-    // Trigger game over through appropriate scene
-    if (window.lobbyScene?.handlePlayerDefeat) {
-      window.lobbyScene.handlePlayerDefeat();
-    } else if (window.bathroomScene?.handlePlayerDefeat) {
-      window.bathroomScene.handlePlayerDefeat();
-    }
+onDeath() {
+  // Only trigger death once
+  if (this._isDead) return;
+  this._isDead = true;
+  
+  console.log("Player defeated!");
+
+  // === KITCHEN SCENE: Trigger Game Over ===
+  if (window.kitchenScene?.handleGameOver) {
+    window.kitchenScene.handleGameOver();
+    return; // Stop here — kitchen handles it
   }
+
+  // === LOBBY / BATHROOM FALLBACK (keep for other levels) ===
+  if (window.lobbyScene?.handlePlayerDefeat) {
+    window.lobbyScene.handlePlayerDefeat();
+  } else if (window.bathroomScene?.handlePlayerDefeat) {
+    window.bathroomScene.handlePlayerDefeat();
+  }
+}
 }

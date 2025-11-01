@@ -411,4 +411,3 @@ This is a simple utility class for managing health points. It's used by Player (
 - **Improvements**: Add loading screens, optimize performance (e.g., for models), mobile controls.
 - **Consistency Tips**: Reuse vectors/objects to avoid GC; standardize scene APIs; use events for transitions.
 
-Let me know what part to expand/work on next (e.g., fix bugs in tutorial, add level3, or debug collisions)!
