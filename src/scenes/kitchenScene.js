@@ -1090,26 +1090,32 @@ handleObjectSelection() {
     }
   }
 
-  handleBossDefeat() {
-    if (this.kitchenGhost.defeatedHandled) return;
-    this.kitchenGhost.defeatedHandled = true;
+handleBossDefeat() {
+  if (this.kitchenGhost.defeatedHandled) return;
+  this.kitchenGhost.defeatedHandled = true;
 
-    this.currentPhase = "complete";
-    this.showMessage("VICTORY! The Kitchen Ghost has been defeated!");
-    this.player.exitCombat();
+  console.log("🎉 handleBossDefeat called!");
 
-    if (this.bossHealthFill?.parentElement) {
-      this.bossHealthFill.parentElement.parentElement.remove();
+  this.currentPhase = "complete";
+  this.showMessage("VICTORY! The Kitchen Ghost has been defeated!");
+  this.player.exitCombat();
+
+  // Clean up combat UI
+  if (this.bossHealthFill && this.bossHealthFill.parentElement) {
+    const healthBar = this.bossHealthFill.parentElement.parentElement;
+    if (healthBar && healthBar.parentElement) {
+      healthBar.remove();
     }
-
-    this.ovenLight.intensity = 0.8;
-    this.ovenLight.color.setHex(0xff4400);
-
-    setTimeout(() => {
-      this.showMessage("The Chef Ghost appears, freed from possession!");
-      this.showChefGhostCutscene();
-    }, 2000);
   }
+
+  this.ovenLight.intensity = 0.8;
+  this.ovenLight.color.setHex(0xff4400);
+
+  setTimeout(() => {
+    this.showMessage("The Chef Ghost appears, freed from possession!");
+    this.showChefGhostCutscene();
+  }, 2000);
+}
 
   showChefGhostCutscene() {
     const cutscene = document.createElement("div");
@@ -1157,59 +1163,86 @@ handleObjectSelection() {
     setTimeout(() => this.showVictoryScreen(), 2000);
   }
 
-  showVictoryScreen() {
-    const victory = document.createElement("div");
-    victory.style.cssText = `
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: linear-gradient(to bottom, #001a00, #003300);
-      display: flex; flex-direction: column;
-      justify-content: center; align-items: center;
-      z-index: 10000; font-family: Arial, sans-serif;
-    `;
+showVictoryScreen() {
+  const victory = document.createElement("div");
+  victory.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(to bottom, #001a00, #003300);
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    z-index: 10000; font-family: Arial, sans-serif;
+  `;
 
-    victory.innerHTML = `
-      <h1 style="color: #00ff00; font-size: 72px; margin-bottom: 20px; text-shadow: 0 0 20px #00ff00;">
-        KITCHEN CLEARED!
-      </h1>
-      <p style="color: white; font-size: 24px; margin-bottom: 40px;">
-        The haunted kitchen has been restored!
+  victory.innerHTML = `
+    <h1 style="color: #00ff00; font-size: 72px; margin-bottom: 20px; text-shadow: 0 0 20px #00ff00;">
+      KITCHEN CLEARED!
+    </h1>
+    <p style="color: white; font-size: 24px; margin-bottom: 40px;">
+      The haunted kitchen has been restored!
+    </p>
+    <div style="background: rgba(0, 0, 0, 0.7); padding: 30px; border-radius: 15px; margin-bottom: 30px;">
+      <p style="color: #ffaa00; font-size: 20px; margin: 10px 0;">
+        Possessed Objects Destroyed: 3/3
       </p>
-      <div style="background: rgba(0, 0, 0, 0.7); padding: 30px; border-radius: 15px; margin-bottom: 30px;">
-        <p style="color: #ffaa00; font-size: 20px; margin: 10px 0;">
-          Possessed Objects Destroyed: 3/3
-        </p>
-        <p style="color: #ffaa00; font-size: 20px; margin: 10px 0;">
-          Kitchen Ghost Defeated
-        </p>
-        <p style="color: #00ff00; font-size: 20px; margin: 10px 0;">
-          Stand Mixer Obtained
-        </p>
-      </div>
-      <button id="continue-btn" style="
-        padding: 20px 50px; font-size: 24px; font-weight: bold;
-        background: linear-gradient(to bottom, #00aa00, #00ff00);
-        color: white; border: none; border-radius: 12px;
-        cursor: pointer; box-shadow: 0 5px 20px rgba(0, 255, 0, 0.5);
-      ">CONTINUE</button>
-    `;
+      <p style="color: #ffaa00; font-size: 20px; margin: 10px 0;">
+        Kitchen Ghost Defeated
+      </p>
+      <p style="color: #00ff00; font-size: 20px; margin: 10px 0;">
+        Stand Mixer Obtained
+      </p>
+    </div>
+    <button id="continue-btn" style="
+      padding: 20px 50px; font-size: 24px; font-weight: bold;
+      background: linear-gradient(to bottom, #00aa00, #00ff00);
+      color: white; border: none; border-radius: 12px;
+      cursor: pointer; box-shadow: 0 5px 20px rgba(0, 255, 0, 0.5);
+    ">CONTINUE</button>
+  `;
 
-    document.body.appendChild(victory);
-    document.getElementById("continue-btn").onclick = () => {
+  document.body.appendChild(victory);
+  
+  const continueBtn = document.getElementById("continue-btn");
+  if (continueBtn) {
+    continueBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log("✅ Continue button clicked!");
       victory.remove();
-      if (window.transitionToNextLevel) window.transitionToNextLevel();
+      if (window.transitionToNextLevel) {
+        window.transitionToNextLevel();
+      } else {
+        console.log("No transition function found");
+      }
     };
   }
+}
 
 handleGameOver() {
+  if (this.gameOver) return; // Prevent multiple calls
+  
   this.gameOver = true;
   this.currentPhase = "gameover";
+  
+  console.log("💀 Game Over triggered!");
+  
+  // Stop all player actions
+  if (this.player) {
+    this.player.canShoot = false;
+    if (this.player.combatMode) {
+      this.player.exitCombat();
+    }
+  }
   
   // Dramatic screen effects
   this.flashScreen(0xff0000, 1.5);
   this.createDeathParticles();
   
   this.showMessage("You've been defeated!");
-  setTimeout(() => this.showRestartMenu(), 1500);
+  
+  // Show restart menu after delay
+  setTimeout(() => {
+    this.showRestartMenu();
+  }, 1500);
 }
 
 // NEW: Create death particle explosion
@@ -1239,6 +1272,8 @@ createDeathParticles() {
 
 // NEW: Enhanced restart menu with stats
 showRestartMenu() {
+  console.log("📋 Showing restart menu...");
+  
   const overlay = document.createElement("div");
   overlay.id = "restart-menu-overlay";
   overlay.style.cssText = `
@@ -1376,20 +1411,35 @@ showRestartMenu() {
 
   document.body.appendChild(overlay);
   
-  // Button handlers
-  document.getElementById("restart-btn").onclick = () => {
-    overlay.remove();
-    window.location.reload();
-  };
+  // FIXED: Button handlers with proper event handling
+  const restartBtn = document.getElementById("restart-btn");
+  const mainMenuBtn = document.getElementById("main-menu-btn");
   
-  document.getElementById("main-menu-btn").onclick = () => {
-    overlay.remove();
-    if (window.returnToMainMenu) {
-      window.returnToMainMenu();
-    } else {
-      window.location.href = '/';
-    }
-  };
+  if (restartBtn) {
+    restartBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log("🔄 Restart button clicked!");
+      overlay.remove();
+      window.location.reload();
+    };
+  }
+  
+  if (mainMenuBtn) {
+    mainMenuBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log("🏠 Main menu button clicked!");
+      overlay.remove();
+      if (window.returnToMainMenu) {
+        window.returnToMainMenu();
+      } else {
+        window.location.href = '/';
+      }
+    };
+  }
+  
+  console.log("✅ Restart menu created with working buttons");
 }
 
 // NEW: Random death messages
@@ -1638,36 +1688,38 @@ setupCombatShooting() {
 }
   }
 
-  updateWithCameraRotation(yaw, pitch) {
-    const delta = this.clock.getDelta();
-    const time = this.clock.elapsedTime;
+// Replace the updateWithCameraRotation function with this:
+updateWithCameraRotation(yaw, pitch) {
+  const delta = this.clock.getDelta();
+  const time = this.clock.elapsedTime;
 
-    if (this.gameOver) {
-      this.renderer.render(this.scene, this.camera);
-      return;
-    }
-
-    this.player.update();
-
-    if (this.currentPhase === "investigation") {
-      this.checkObjectRaycast();
-    }
-
-    this.updateInteractiveObjects(delta, time);
-    this.updateParticles(delta);
-    this.updateDynamicLighting(time);
-
-    if (this.kitchenGhost && this.kitchenGhost.isAlive) {
-      this.kitchenGhost.update(delta, time);
-      this.updateBossHealth();
-      this.checkPlayerHit();
-      if (!this.kitchenGhost.isAlive && !this.kitchenGhost.defeatedHandled) {
-        this.handleBossDefeat();
-      }
-    }
-
+  if (this.gameOver) {
     this.renderer.render(this.scene, this.camera);
+    return;
   }
+
+  this.player.update();
+
+  if (this.currentPhase === "investigation") {
+    this.checkObjectRaycast();
+  }
+
+  this.updateInteractiveObjects(delta, time);
+  this.updateParticles(delta);
+  this.updateDynamicLighting(time);
+
+  if (this.kitchenGhost && this.kitchenGhost.isAlive) {
+    this.kitchenGhost.update(delta, time);
+    this.updateBossHealth();
+    this.checkPlayerHit();
+  } else if (this.kitchenGhost && !this.kitchenGhost.isAlive && !this.kitchenGhost.defeatedHandled) {
+    // FIXED: Boss was defeated, trigger victory
+    console.log("🎉 Boss defeated - calling handleBossDefeat");
+    this.handleBossDefeat();
+  }
+
+  this.renderer.render(this.scene, this.camera);
+}
 
   update() {
     this.updateWithCameraRotation(0, 0);

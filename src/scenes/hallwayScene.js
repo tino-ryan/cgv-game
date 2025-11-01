@@ -1,4 +1,4 @@
-// src/scenes/hallwayScene.js - COMPLETE FIXED VERSION
+// src/scenes/hallwayScene.js - ENHANCED VERSION
 import * as THREE from "three";
 import HUD from "../ui/hud.js";
 import PhysicsSystem from "../systems/physics.js";
@@ -16,7 +16,6 @@ export default class HallwayScene {
     this.physics = new PhysicsSystem(this.scene);
     this.inventory = new Inventory(null);
     
-    // Puzzle state
     this.currentTilePair = 0;
     this.totalTilePairs = 5;
     this.tiles = [];
@@ -24,9 +23,9 @@ export default class HallwayScene {
     this.isTransitioning = false;
     this.selectedSide = null;
     this.arrowIndicators = [];
-    this.allowNormalMovement = false; // FIXED: Disable WASD until puzzle complete
+    this.allowNormalMovement = false;
     
-    this.spawnPosition = new THREE.Vector3(0, 1.5, 19); // FIXED: Updated to match new start platform
+    this.spawnPosition = new THREE.Vector3(0, 1.5, 15);
     this.initialCameraRotation = cameraRotation || { yaw: 0, pitch: 0 };
     
     this.hud = (existingPlayer && existingPlayer.hud) ? existingPlayer.hud : new HUD();
@@ -52,11 +51,13 @@ export default class HallwayScene {
     }
 
     this.createHallway();
-     this.createFloor(); 
+    this.createFloor();
+    this.createCeiling();
     this.createTilePuzzle();
     this.createBathroomDoor();
     this.setupLighting();
-    this.addAtmosphericDetails(); // NEW: Add extra details
+    this.addAtmosphericDetails();
+    this.addWindowsAndArtwork();
     this.setupArrowKeyControls();
     this.createSelectionUI();
 
@@ -98,18 +99,6 @@ export default class HallwayScene {
 
     this.addWallTrim(leftWall, rightWall);
 
-    const ceiling = new THREE.Mesh(
-      new THREE.PlaneGeometry(10, 40),
-      new THREE.MeshStandardMaterial({ 
-        color: 0x4a3a2a,
-        roughness: 0.95
-      })
-    );
-    ceiling.rotation.x = Math.PI / 2;
-    ceiling.position.y = 6;
-    ceiling.receiveShadow = true;
-    this.scene.add(ceiling);
-
     const backWall = new THREE.Mesh(
       new THREE.BoxGeometry(10, 6, 0.5),
       wallMaterial
@@ -125,65 +114,136 @@ export default class HallwayScene {
   }
   
   createFloor() {
-  // Create main floor geometry
-  const floorGeometry = new THREE.PlaneGeometry(10, 40);
-  
-  // Create floor material with tile texture
-  const floorMaterial = new THREE.MeshStandardMaterial({
-    roughness: 0.8,
-    metalness: 0.1
-  });
-  
-  // Load tile texture with multiple path attempts
-  const textureLoader = new THREE.TextureLoader();
-  const texturePaths = [
-    '/assets/textures/tiles.jpg',
-    '/assets/textures/tiles.png',
-    './assets/textures/tiles.jpg',
-    './assets/textures/tiles.png',
-    'assets/textures/tiles.jpg',
-    'assets/textures/tiles.png'
-  ];
-  
-  const tryLoadTexture = (index) => {
-    if (index >= texturePaths.length) {
-      console.warn('Floor tile texture not found - using fallback color');
-      floorMaterial.color.setHex(0x8b7355); // Brown tile color
-      return;
-    }
+    const floorGeometry = new THREE.PlaneGeometry(10, 40);
     
-    textureLoader.load(
-      texturePaths[index],
-      (texture) => {
-        console.log('✅ Floor tile texture loaded from:', texturePaths[index]);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(10, 20); // Repeat texture across floor
-        floorMaterial.map = texture;
-        floorMaterial.needsUpdate = true;
-      },
-      undefined,
-      (error) => {
-        console.log('❌ Failed to load floor texture from:', texturePaths[index]);
-        tryLoadTexture(index + 1);
+    const floorMaterial = new THREE.MeshStandardMaterial({
+      roughness: 0.8,
+      metalness: 0.1
+    });
+    
+    const textureLoader = new THREE.TextureLoader();
+    const texturePaths = [
+      '/assets/textures/tiles.jpg',
+      '/assets/textures/tiles.png',
+      './assets/textures/tiles.jpg',
+      './assets/textures/tiles.png',
+      'assets/textures/tiles.jpg',
+      'assets/textures/tiles.png'
+    ];
+    
+    const tryLoadTexture = (index) => {
+      if (index >= texturePaths.length) {
+        console.warn('Floor tile texture not found - using fallback color');
+        floorMaterial.color.setHex(0x8b7355);
+        return;
       }
+      
+      textureLoader.load(
+        texturePaths[index],
+        (texture) => {
+          console.log('✅ Floor tile texture loaded from:', texturePaths[index]);
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.RepeatWrapping;
+          texture.repeat.set(10, 20);
+          floorMaterial.map = texture;
+          floorMaterial.needsUpdate = true;
+        },
+        undefined,
+        (error) => {
+          console.log('❌ Failed to load floor texture from:', texturePaths[index]);
+          tryLoadTexture(index + 1);
+        }
+      );
+    };
+    
+    tryLoadTexture(0);
+    
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0;
+    floor.receiveShadow = true;
+    
+    this.scene.add(floor);
+    this.floor = floor;
+    
+    console.log("🟫 Floor with tile texture created");
+  }
+
+  createCeiling() {
+    const ceilingGeometry = new THREE.PlaneGeometry(10, 40);
+    const ceilingMaterial = new THREE.MeshStandardMaterial({ 
+      roughness: 0.95,
+      metalness: 0.05
+    });
+    
+    const textureLoader = new THREE.TextureLoader();
+    const texturePaths = [
+      '/assets/textures/ceiling.jpg',
+      '/assets/textures/ceiling.png',
+      './assets/textures/ceiling.jpg',
+      './assets/textures/ceiling.png',
+      'assets/textures/ceiling.jpg',
+      'assets/textures/ceiling.png'
+    ];
+    
+    const tryLoadTexture = (index) => {
+      if (index >= texturePaths.length) {
+        console.warn('Ceiling texture not found - using fallback color');
+        ceilingMaterial.color.setHex(0x4a3a2a);
+        return;
+      }
+      
+      textureLoader.load(
+        texturePaths[index],
+        (texture) => {
+          console.log('✅ Ceiling texture loaded from:', texturePaths[index]);
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.RepeatWrapping;
+          texture.repeat.set(5, 20);
+          ceilingMaterial.map = texture;
+          ceilingMaterial.needsUpdate = true;
+        },
+        undefined,
+        (error) => {
+          console.log('❌ Failed to load ceiling texture from:', texturePaths[index]);
+          tryLoadTexture(index + 1);
+        }
+      );
+    };
+    
+    tryLoadTexture(0);
+    
+    const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.y = 6;
+    ceiling.receiveShadow = true;
+    this.scene.add(ceiling);
+    
+    // Add ceiling trim/molding
+    const trimMaterial = new THREE.MeshStandardMaterial({
+      color: 0x3a2a1a,
+      roughness: 0.7
+    });
+    
+    const leftTrim = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.3, 40),
+      trimMaterial
     );
-  };
+    leftTrim.position.set(-4.85, 5.85, 0);
+    this.scene.add(leftTrim);
+    
+    const rightTrim = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.3, 40),
+      trimMaterial
+    );
+    rightTrim.position.set(4.85, 5.85, 0);
+    this.scene.add(rightTrim);
+    
+    console.log("🔲 Ceiling with texture created");
+  }
   
-  tryLoadTexture(0);
-  
-  const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = 0;
-  floor.receiveShadow = true;
-  
-  this.scene.add(floor);
-  this.floor = floor;
-  
-  console.log("🟫 Floor with tile texture created");
-}
   createEndWall() {
-    const lastTileZ = 15.5 - ((this.totalTilePairs - 1) * 3.8); // FIXED: Updated to match new startZ
+    const lastTileZ = 15.5 - ((this.totalTilePairs - 1) * 3.8);
     const endWallZ = lastTileZ - 3.8 / 2 - 7;
     
     this.endWallZ = endWallZ;
@@ -273,62 +333,132 @@ export default class HallwayScene {
     }
   }
 
-  addAtmosphericDetails() {
-    // Add paintings/frames on walls
-    for (let z = 14; z >= -6; z -= 8) {
-      // Left wall painting
-      const leftFrame = new THREE.Mesh(
-        new THREE.BoxGeometry(1.5, 2, 0.1),
+  addWindowsAndArtwork() {
+    const textureLoader = new THREE.TextureLoader();
+    
+    // Windows on back wall
+    for (let x = -3; x <= 3; x += 3) {
+      const windowFrame = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 2.5, 0.15),
         new THREE.MeshStandardMaterial({
-          color: 0x3a2a1a,
-          roughness: 0.4,
-          metalness: 0.2
+          color: 0x2a1a0a,
+          roughness: 0.6
         })
       );
-      leftFrame.position.set(-4.7, 3.5, z);
-      leftFrame.rotation.y = Math.PI / 2;
-      this.scene.add(leftFrame);
+      windowFrame.position.set(x, 3.5, 19.8);
+      this.scene.add(windowFrame);
       
-      // Painting canvas
-      const leftCanvas = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.3, 1.8),
-        new THREE.MeshStandardMaterial({
-          color: 0x4a3a2a,
-          emissive: 0x2a1a0a,
-          emissiveIntensity: 0.1
-        })
-      );
-      leftCanvas.position.set(-4.65, 3.5, z);
-      leftCanvas.rotation.y = Math.PI / 2;
-      this.scene.add(leftCanvas);
+      // Window glass with texture
+      const windowMaterial = new THREE.MeshStandardMaterial({
+        transparent: true,
+        opacity: 0.7,
+        roughness: 0.1,
+        metalness: 0.3,
+        emissive: 0x1a1a2a,
+        emissiveIntensity: 0.2
+      });
       
-      // Right wall painting
-      const rightFrame = new THREE.Mesh(
-        new THREE.BoxGeometry(1.5, 2, 0.1),
-        new THREE.MeshStandardMaterial({
-          color: 0x3a2a1a,
-          roughness: 0.4,
-          metalness: 0.2
-        })
-      );
-      rightFrame.position.set(4.7, 3.5, z);
-      rightFrame.rotation.y = -Math.PI / 2;
-      this.scene.add(rightFrame);
+      const windowPaths = [
+        '/assets/textures/window.jpg',
+        '/assets/textures/window.png',
+        './assets/textures/window.jpg',
+        './assets/textures/window.png',
+        'assets/textures/window.jpg',
+        'assets/textures/window.png'
+      ];
       
-      const rightCanvas = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.3, 1.8),
-        new THREE.MeshStandardMaterial({
-          color: 0x4a3a2a,
-          emissive: 0x2a1a0a,
-          emissiveIntensity: 0.1
-        })
+      textureLoader.load(
+        windowPaths[0],
+        (texture) => {
+          windowMaterial.map = texture;
+          windowMaterial.needsUpdate = true;
+        },
+        undefined,
+        () => {
+          windowMaterial.color.setHex(0x3a4a5a);
+        }
       );
-      rightCanvas.position.set(4.65, 3.5, z);
-      rightCanvas.rotation.y = -Math.PI / 2;
-      this.scene.add(rightCanvas);
+      
+      const windowGlass = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.6, 2.3),
+        windowMaterial
+      );
+      windowGlass.position.set(x, 3.5, 19.85);
+      this.scene.add(windowGlass);
+      
+      // Window light effect
+      const windowLight = new THREE.PointLight(0x6688aa, 0.5, 5);
+      windowLight.position.set(x, 3.5, 19);
+      this.scene.add(windowLight);
     }
     
-    // Add warning signs near tiles
+    // Paintings/Artwork on side walls
+    const artworkPositions = [
+      { x: -4.7, z: 12, rotation: Math.PI / 2 },
+      { x: 4.7, z: 10, rotation: -Math.PI / 2 },
+      { x: -4.7, z: 4, rotation: Math.PI / 2 },
+      { x: 4.7, z: 2, rotation: -Math.PI / 2 },
+      { x: -4.7, z: -4, rotation: Math.PI / 2 },
+      { x: 4.7, z: -6, rotation: -Math.PI / 2 }
+    ];
+    
+    artworkPositions.forEach((pos, index) => {
+      // Ornate frame
+      const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 2, 0.15),
+        new THREE.MeshStandardMaterial({
+          color: 0x8b6914,
+          roughness: 0.4,
+          metalness: 0.6
+        })
+      );
+      frame.position.set(pos.x, 3.5, pos.z);
+      frame.rotation.y = pos.rotation;
+      this.scene.add(frame);
+      
+      // Canvas with varying colors for variety
+      const artColors = [0x4a2a1a, 0x2a3a4a, 0x3a1a2a, 0x1a2a1a, 0x4a3a2a, 0x2a2a3a];
+      const canvas = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.3, 1.8),
+        new THREE.MeshStandardMaterial({
+          color: artColors[index % artColors.length],
+          emissive: artColors[index % artColors.length],
+          emissiveIntensity: 0.15
+        })
+      );
+      const offset = pos.x < 0 ? 0.05 : -0.05;
+      canvas.position.set(pos.x + (pos.x < 0 ? offset : offset), 3.5, pos.z);
+      canvas.rotation.y = pos.rotation;
+      this.scene.add(canvas);
+      
+      // Add decorative border
+      const borderGeometry = new THREE.EdgesGeometry(new THREE.PlaneGeometry(1.3, 1.8));
+      const borderMaterial = new THREE.LineBasicMaterial({ color: 0xffd700, linewidth: 2 });
+      const border = new THREE.LineSegments(borderGeometry, borderMaterial);
+      canvas.add(border);
+    });
+  }
+
+  addAtmosphericDetails() {
+    // Hanging chains from ceiling
+    for (let i = 0; i < 6; i++) {
+      const chain = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 2, 8),
+        new THREE.MeshStandardMaterial({
+          color: 0x4a4a4a,
+          roughness: 0.7,
+          metalness: 0.8
+        })
+      );
+      chain.position.set(
+        (Math.random() - 0.5) * 8,
+        5,
+        Math.random() * 30 - 15
+      );
+      this.scene.add(chain);
+    }
+    
+    // Warning sign near first tiles
     const warningSign = new THREE.Mesh(
       new THREE.PlaneGeometry(2, 1),
       new THREE.MeshStandardMaterial({
@@ -340,7 +470,7 @@ export default class HallwayScene {
     warningSign.position.set(0, 3, 17.5);
     this.scene.add(warningSign);
     
-    // Add floor grates for atmosphere
+    // Floor grates
     for (let z = 16; z >= -8; z -= 10) {
       const grate = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
@@ -359,8 +489,8 @@ export default class HallwayScene {
       this.scene.add(grateRight);
     }
     
-    // Add cobwebs in corners for spooky atmosphere
-    for (let i = 0; i < 5; i++) {
+    // Cobwebs
+    for (let i = 0; i < 8; i++) {
       const cobweb = new THREE.Mesh(
         new THREE.SphereGeometry(0.3, 8, 8),
         new THREE.MeshStandardMaterial({
@@ -378,7 +508,7 @@ export default class HallwayScene {
       this.scene.add(cobweb);
     }
     
-    // Add glowing runes on some tiles for mystical effect
+    // Glowing runes on tiles
     this.tiles.forEach((tile, index) => {
       if (index % 3 === 0) {
         const rune = new THREE.Mesh(
@@ -393,7 +523,6 @@ export default class HallwayScene {
         rune.position.set(tile.position.x, tile.position.y + 0.21, tile.position.z);
         this.scene.add(rune);
         
-        // Animate rune
         const animateRune = () => {
           rune.material.opacity = 0.2 + Math.sin(Date.now() * 0.002 + index) * 0.2;
           if (!this.puzzleComplete) {
@@ -404,8 +533,23 @@ export default class HallwayScene {
       }
     });
     
-    // Add dust particles in the air
+    // Dust particles
     this.createDustParticles();
+    
+    // Ceiling pipes for industrial feel
+    for (let z = 15; z >= -10; z -= 8) {
+      const pipe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.15, 10, 8),
+        new THREE.MeshStandardMaterial({
+          color: 0x5a5a5a,
+          roughness: 0.6,
+          metalness: 0.7
+        })
+      );
+      pipe.rotation.z = Math.PI / 2;
+      pipe.position.set(0, 5.7, z);
+      this.scene.add(pipe);
+    }
   }
 
   createDustParticles() {
@@ -449,7 +593,6 @@ export default class HallwayScene {
       particle.position.y += particle.userData.velocity.y;
       particle.position.z += particle.userData.velocity.z;
       
-      // Reset particles that go out of bounds
       if (particle.position.y > 6) particle.position.y = 0;
       if (particle.position.x > 5) particle.position.x = -5;
       if (particle.position.x < -5) particle.position.x = 5;
@@ -459,7 +602,6 @@ export default class HallwayScene {
   }
 
   createTilePuzzle() {
-    // FIXED: Tiles now perfectly aligned with no gaps
     const tileWidth = 5;
     const tileDepth = 3.8;
     const startZ = 13;
@@ -475,7 +617,7 @@ export default class HallwayScene {
     console.log("Safe tiles pattern:", safeTiles.map(s => s === 0 ? 'LEFT' : 'RIGHT'));
     
     for (let i = 0; i < this.totalTilePairs; i++) {
-      const pairZ = startZ - (i * tileDepth); // FIXED: Removed gap variable
+      const pairZ = startZ - (i * tileDepth);
       const isSafeLeft = safeTiles[i] === 0;
       
       const leftTile = this.createTile(-2.5, pairZ, tileWidth, tileDepth, isSafeLeft, i, 'left');
@@ -485,32 +627,6 @@ export default class HallwayScene {
       this.tiles.push(rightTile);
     }
     
-    const startPlatform = new THREE.Mesh(
-      new THREE.BoxGeometry(10, 0.4, 5),
-      new THREE.MeshStandardMaterial({
-        color: 0x8b7355,
-        roughness: 0.6,
-        metalness: 0.1
-      })
-    );
-    startPlatform.position.set(0, 0.2, 18);
-    startPlatform.receiveShadow = true;
-    startPlatform.castShadow = true;
-    this.scene.add(startPlatform);
-    
-    const startMarking = new THREE.Mesh(
-      new THREE.CircleGeometry(1.5, 32),
-      new THREE.MeshStandardMaterial({
-        color: 0xffcc66,
-        emissive: 0xaa8844,
-        emissiveIntensity: 0.3
-      })
-    );
-    startMarking.rotation.x = -Math.PI / 2;
-    startMarking.position.set(0, 0.45, 18);
-    this.scene.add(startMarking);
-    
-    // FIXED: Updated calculation to match new tile positioning
     const lastTileZ = startZ - ((this.totalTilePairs - 1) * tileDepth);
     const endPlatformZ = lastTileZ - tileDepth / 2 - 3;
     
@@ -680,10 +796,9 @@ export default class HallwayScene {
   }
 
   setupLighting() {
-    const ambient = new THREE.AmbientLight(0xffddb3, 0.4); // IMPROVED: Slightly darker for atmosphere
+    const ambient = new THREE.AmbientLight(0xffddb3, 0.4);
     this.scene.add(ambient);
     
-    // Dramatic ceiling lights with flickering effect
     this.ceilingLights = [];
     for (let z = 18; z >= -10; z -= 5) {
       const light = new THREE.PointLight(0xffffee, 1.8, 12);
@@ -707,14 +822,13 @@ export default class HallwayScene {
       this.scene.add(bulb);
     }
     
-    // Green light at bathroom door with pulsing effect
     const doorLight = new THREE.PointLight(0x44ff44, 1.5, 12);
     doorLight.position.set(0, 3, -9);
     doorLight.userData.baseIntensity = 1.5;
     this.scene.add(doorLight);
     this.doorLight = doorLight;
     
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3); // IMPROVED: Darker for mood
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
     fillLight.position.set(5, 8, 5);
     fillLight.castShadow = true;
     fillLight.shadow.camera.left = -10;
@@ -723,20 +837,17 @@ export default class HallwayScene {
     fillLight.shadow.camera.bottom = -10;
     this.scene.add(fillLight);
     
-    // Add colored accent lights on safe tiles (revealed after stepping)
     this.tileHighlightLights = [];
   }
 
   animateLighting() {
     const time = Date.now() * 0.001;
     
-    // Flicker ceiling lights subtly
     this.ceilingLights?.forEach((light, index) => {
       const flicker = Math.sin(time * light.userData.flickerSpeed + index) * 0.1;
       light.intensity = light.userData.baseIntensity + flicker;
     });
     
-    // Pulse door light when puzzle complete
     if (this.puzzleComplete && this.doorLight) {
       this.doorLight.intensity = this.doorLight.userData.baseIntensity + Math.sin(time * 2) * 0.5;
     }
@@ -1080,7 +1191,7 @@ export default class HallwayScene {
     this.rightButton.style.borderColor = '#666';
     this.rightButton.style.transform = 'scale(1)';
     
-    let respawnZ = 16;
+    let respawnZ = 15;
     
     if (this.currentTilePair > 0) {
       const lastSuccessfulPair = this.currentTilePair - 1;
@@ -1152,7 +1263,6 @@ export default class HallwayScene {
     this.puzzleComplete = true;
     this.isTransitioning = false;
     
-    // FIXED: Enable normal WASD movement after puzzle completion
     this.allowNormalMovement = true;
     
     if (this.selectionUI) {
@@ -1220,54 +1330,51 @@ export default class HallwayScene {
     }
   }
 
-enterBathroom() {
-  this.hud.showMessage("🛁 Entering the bathroom...");
-  console.log("🛁 Transitioning to bathroom boss fight");
-  
-  if (this.doorKeyListener) {
-    window.removeEventListener('keydown', this.doorKeyListener);
-    this.doorKeyListener = null;
-  }
-  
-  // Clean up hallway UI
-  if (this.selectionUI && this.selectionUI.parentNode) {
-    this.selectionUI.style.display = 'none';
-  }
-  
-  const fadeOverlay = document.createElement('div');
-  fadeOverlay.style.position = 'fixed';
-  fadeOverlay.style.top = '0';
-  fadeOverlay.style.left = '0';
-  fadeOverlay.style.width = '100%';
-  fadeOverlay.style.height = '100%';
-  fadeOverlay.style.background = 'black';
-  fadeOverlay.style.opacity = '0';
-  fadeOverlay.style.transition = 'opacity 1s';
-  fadeOverlay.style.zIndex = '10000';
-  document.body.appendChild(fadeOverlay);
-  
-  setTimeout(() => {
-    fadeOverlay.style.opacity = '1';
-  }, 100);
-  
-  // Transition to bathroom after fade
-  setTimeout(() => {
-    if (window.transitionToBathroom) {
-      window.transitionToBathroom();
+  enterBathroom() {
+    this.hud.showMessage("🛁 Entering the bathroom...");
+    console.log("🛁 Transitioning to bathroom boss fight");
+    
+    if (this.doorKeyListener) {
+      window.removeEventListener('keydown', this.doorKeyListener);
+      this.doorKeyListener = null;
     }
-    // Remove fade overlay after transition
+    
+    if (this.selectionUI && this.selectionUI.parentNode) {
+      this.selectionUI.style.display = 'none';
+    }
+    
+    const fadeOverlay = document.createElement('div');
+    fadeOverlay.style.position = 'fixed';
+    fadeOverlay.style.top = '0';
+    fadeOverlay.style.left = '0';
+    fadeOverlay.style.width = '100%';
+    fadeOverlay.style.height = '100%';
+    fadeOverlay.style.background = 'black';
+    fadeOverlay.style.opacity = '0';
+    fadeOverlay.style.transition = 'opacity 1s';
+    fadeOverlay.style.zIndex = '10000';
+    document.body.appendChild(fadeOverlay);
+    
     setTimeout(() => {
-      if (fadeOverlay.parentNode) {
-        fadeOverlay.style.opacity = '0';
-        setTimeout(() => {
-          if (fadeOverlay.parentNode) {
-            document.body.removeChild(fadeOverlay);
-          }
-        }, 1000);
+      fadeOverlay.style.opacity = '1';
+    }, 100);
+    
+    setTimeout(() => {
+      if (window.transitionToBathroom) {
+        window.transitionToBathroom();
       }
-    }, 500);
-  }, 1000);
-}
+      setTimeout(() => {
+        if (fadeOverlay.parentNode) {
+          fadeOverlay.style.opacity = '0';
+          setTimeout(() => {
+            if (fadeOverlay.parentNode) {
+              document.body.removeChild(fadeOverlay);
+            }
+          }, 1000);
+        }
+      }, 500);
+    }, 1000);
+  }
 
   animateTiles(delta) {
     const time = this.clock.elapsedTime;
@@ -1281,8 +1388,8 @@ enterBathroom() {
       }
     });
     
-    // Animate dust particles
     this.animateDustParticles();
+    this.animateLighting();
   }
 
   showPuzzleInstructions() {
