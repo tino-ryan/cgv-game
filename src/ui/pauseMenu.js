@@ -63,7 +63,7 @@ export default class PauseMenu {
 
     // --- Small Pause Button (HUD corner) ---
     this.pauseButton = document.createElement("button");
-    this.pauseButton.textContent = "⏸️";
+    this.pauseButton.textContent = "⏸";
     Object.assign(this.pauseButton.style, {
       position: "fixed",
       top: "20px",
