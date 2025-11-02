@@ -84,21 +84,22 @@ export default class HUD {
     return fill;
   }
 
-createBossHealthBar() {
+// src/ui/hud.js
+createBossHealthBar(bossName = "Boss") {
   // Remove any existing boss health bar first
   this.removeBossHealthBar();
 
   this.bossHealthBar = document.createElement("div");
-  this.bossHealthBar.style.position = "fixed"; // Changed from absolute to fixed
+  this.bossHealthBar.style.position = "fixed";
   this.bossHealthBar.style.top = "30px";
   this.bossHealthBar.style.left = "50%";
   this.bossHealthBar.style.transform = "translateX(-50%)";
-  this.bossHealthBar.style.width = "400px"; // Made it wider for better visibility
-  this.bossHealthBar.style.height = "30px"; // Made it taller
-  this.bossHealthBar.style.border = "3px solid #ff0000"; // Thicker red border
-  this.bossHealthBar.style.background = "rgba(0,0,0,0.8)"; // Darker background
+  this.bossHealthBar.style.width = "400px";
+  this.bossHealthBar.style.height = "30px";
+  this.bossHealthBar.style.border = "3px solid #ff0000";
+  this.bossHealthBar.style.background = "rgba(0,0,0,0.8)";
   this.bossHealthBar.style.borderRadius = "8px";
-  this.bossHealthBar.style.zIndex = "9999"; // Ensure it's on top
+  this.bossHealthBar.style.zIndex = "9999";
 
   this.bossHealthFill = document.createElement("div");
   this.bossHealthFill.style.height = "100%";
@@ -108,9 +109,9 @@ createBossHealthBar() {
   this.bossHealthFill.style.borderRadius = "5px";
   this.bossHealthBar.appendChild(this.bossHealthFill);
 
-  // Boss label
+  // Boss label – now dynamic!
   const label = document.createElement("span");
-  label.innerText = "Bellboy Ghost";
+  label.innerText = bossName; // ← Now uses parameter
   label.style.position = "absolute";
   label.style.left = "0";
   label.style.top = "0";
@@ -123,11 +124,11 @@ createBossHealthBar() {
   label.style.fontWeight = "bold";
   label.style.fontSize = "16px";
   label.style.textShadow = "2px 2px 4px black";
-  label.style.pointerEvents = "none"; // Make sure it doesn't block anything
+  label.style.pointerEvents = "none";
   this.bossHealthBar.appendChild(label);
 
   document.body.appendChild(this.bossHealthBar);
-  console.log("✅ Boss health bar created and added to DOM!");
+  console.log(`Boss health bar created: "${bossName}"`);
 }
 
 updateBossHealth(percent) {

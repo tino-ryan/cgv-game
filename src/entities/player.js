@@ -194,143 +194,87 @@ export default class Player {
     }
   }
 
-  shoot() {
-    if (!this.canShoot || !this.gun) return;
+shoot() {
+  if (!this.canShoot || !this.gun) return;
 
-    this.canShoot = false;
+  this.canShoot = false;
+  setTimeout(() => this.canShoot = true, this.shootCooldown);
 
-    setTimeout(() => {
-      this.canShoot = true;
-    }, this.shootCooldown);
+  const gunPos = new THREE.Vector3();
+  this.gun.getWorldPosition(gunPos);
 
-    // Get gun world position
-    const gunPosition = new THREE.Vector3();
-    this.gun.getWorldPosition(gunPosition);
+  const dir = new THREE.Vector3();
+  this.camera.getWorldDirection(dir);
 
-    // Get camera forward direction
-    const direction = new THREE.Vector3();
-    this.camera.getWorldDirection(direction);
+  this.raycaster.set(gunPos, dir);
+  this.raycaster.far = 100;
 
-    // Setup raycaster
-    this.raycaster.set(gunPosition, direction);
-    this.raycaster.far = 100;
+  // === HYBRID: Scan ALL + Specific Targets ===
+  const targets = this.scene.children.filter(obj => 
+    obj.userData.isBoss || obj.userData.isEnemy || obj.userData.isSuspicious
+  );
 
-    // Collect all potential targets
-    const targets = [];
-
-    // Add lobby boss
-    if (window.lobbyScene?.boss?.mesh) {
-      targets.push(window.lobbyScene.boss.mesh);
-    }
-
-    // Add bathroom boss
-    if (window.bathroomScene?.boss?.mesh) {
-      targets.push(window.bathroomScene.boss.mesh);
-    }
-
-    // Add kitchen boss
-    if (window.kitchenScene?.kitchenGhost?.mesh) {
-      targets.push(window.kitchenScene.kitchenGhost.mesh);
-    }
-
-    // Add tutorial objects
-    if (this.tutorial?.disguisedObjects) {
-      targets.push(...this.tutorial.disguisedObjects);
-    }
-
-    // Perform raycast
-    const intersects = this.raycaster.intersectObjects(targets, true);
-
-    let tracerEnd = new THREE.Vector3();
-    let hitSomething = false;
-
-    if (intersects.length > 0) {
-      const hit = intersects[0];
-      tracerEnd.copy(hit.point);
-      hitSomething = true;
-
-      let targetObject = hit.object;
-      while (
-        targetObject.parent &&
-        !targetObject.userData.isBoss &&
-        !targetObject.userData.isEnemy &&
-        !targetObject.userData.isSuspicious
-      ) {
-        targetObject = targetObject.parent;
-      }
-
-      // Handle boss hits
-      if (targetObject.userData.isBoss) {
-        console.log("Boss hit!");
-
-        if (
-          window.lobbyScene?.boss &&
-          targetObject === window.lobbyScene.boss.mesh
-        ) {
-          window.lobbyScene.boss.takeDamage(10);
-          window.lobbyScene.showHitMarker?.();
-        } else if (
-          window.bathroomScene?.boss &&
-          targetObject === window.bathroomScene.boss.mesh
-        ) {
-          window.bathroomScene.boss.takeDamage(10);
-          window.bathroomScene.showHitMarker?.();
-        } else if (
-          window.kitchenScene?.kitchenGhost &&
-          targetObject === window.kitchenScene.kitchenGhost.mesh
-        ) {
-          window.kitchenScene.kitchenGhost.takeDamage(10);
-          window.kitchenScene.showHitMarker?.();
-        }
-      }
-      // Handle tutorial suspicious objects
-      else if (
-        targetObject.userData.isEnemy ||
-        targetObject.userData.isSuspicious
-      ) {
-        console.log("Tutorial object hit!");
-
-        this.scene.remove(targetObject);
-
-        if (targetObject.geometry) targetObject.geometry.dispose();
-        if (targetObject.material) {
-          if (Array.isArray(targetObject.material)) {
-            targetObject.material.forEach((mat) => mat.dispose());
-          } else {
-            targetObject.material.dispose();
-          }
-        }
-
-        if (this.tutorial) {
-          const idx = this.tutorial.disguisedObjects.indexOf(targetObject);
-          if (idx !== -1) {
-            this.tutorial.disguisedObjects.splice(idx, 1);
-          }
-          this.tutorial.releaseSpirit(hit.point);
-        }
-      }
-    } else {
-      // Miss — extend tracer far
-      tracerEnd.copy(gunPosition).add(direction.clone().multiplyScalar(50));
-    }
-
-    // Create tracer line
-    const geometry = new THREE.BufferGeometry().setFromPoints([
-      gunPosition.clone(),
-      tracerEnd,
-    ]);
-    const line = new THREE.Line(geometry, this.tracerMaterial);
-    this.scene.add(line);
-
-    // Remove tracer after duration
-    setTimeout(() => {
-      this.scene.remove(line);
-      geometry.dispose();
-    }, this.tracerDuration);
-
-    console.log("Shot fired!", hitSomething ? "HIT!" : "MISS");
+  // Add specific bosses (for performance)
+  if (window.lobbyScene?.boss?.mesh && !targets.includes(window.lobbyScene.boss.mesh)) {
+    targets.push(window.lobbyScene.boss.mesh);
+  }
+  if (window.bathroomScene?.boss?.bossModel && !targets.includes(window.bathroomScene.boss.bossModel)) {
+    targets.push(window.bathroomScene.boss.bossModel);  // ← KEY FIX
+  }
+  if (window.kitchenScene?.kitchenGhost?.mesh && !targets.includes(window.kitchenScene.kitchenGhost.mesh)) {
+    targets.push(window.kitchenScene.kitchenGhost.mesh);
   }
 
+  const intersects = this.raycaster.intersectObjects(targets, true);
+
+  let tracerEnd = gunPos.clone().add(dir.multiplyScalar(50));
+  let hit = false;
+
+  if (intersects.length > 0) {
+    tracerEnd.copy(intersects[0].point);
+    hit = true;
+
+    let target = intersects[0].object;
+    while (target && !target.userData.isBoss && !target.userData.isEnemy && !target.userData.isSuspicious) {
+      target = target.parent;
+    }
+
+    if (target?.userData.isBoss) {
+      console.log("🎯 Boss hit!");
+
+      // Damage the correct boss
+      const bossScene = window.bathroomScene || window.lobbyScene || window.kitchenScene;
+      if (bossScene?.boss?.takeDamage) {
+        bossScene.boss.takeDamage(10);
+        bossScene.showHitMarker?.();
+      } else if (bossScene?.kitchenGhost?.takeDamage) {
+        bossScene.kitchenGhost.takeDamage(10);
+        bossScene.showHitMarker?.();
+      }
+    }
+    // Tutorial objects...
+    else if (target?.userData.isEnemy || target?.userData.isSuspicious) {
+      this.scene.remove(target);
+      // ... cleanup code
+      if (this.tutorial) {
+        const idx = this.tutorial.disguisedObjects.indexOf(target);
+        if (idx > -1) this.tutorial.disguisedObjects.splice(idx, 1);
+        this.tutorial.releaseSpirit(intersects[0].point);
+      }
+    }
+  }
+
+  // Tracer...
+  const geom = new THREE.BufferGeometry().setFromPoints([gunPos.clone(), tracerEnd]);
+  const line = new THREE.Line(geom, this.tracerMaterial);
+  this.scene.add(line);
+  setTimeout(() => {
+    this.scene.remove(line);
+    geom.dispose();
+  }, this.tracerDuration);
+
+  console.log("Shot fired!", hit ? "HIT!" : "MISS");
+}
   takeDamage(amount = 1) {
     if (this.health.current <= 0 || this._isDead) return;
 

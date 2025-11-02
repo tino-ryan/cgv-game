@@ -1259,122 +1259,100 @@ export default class HallwayScene {
     }, 2500);
   }
 
-  completePuzzle() {
-    this.puzzleComplete = true;
-    this.isTransitioning = false;
+// Replace the completePuzzle function
+completePuzzle() {
+  this.puzzleComplete = true;
+  this.isTransitioning = false;
+  
+  if (this.selectionUI) {
+    this.selectionUI.style.display = 'none';
+  }
+  
+  // Animate all tiles to golden color
+  this.tiles.forEach((tile, index) => {
+    setTimeout(() => {
+      tile.material.color.setHex(0xffd700);
+      tile.material.emissive.setHex(0xffaa00);
+      tile.material.emissiveIntensity = 0.6;
+    }, index * 100);
+  });
+  
+  this.hud.showMessage("🎉 PUZZLE COMPLETE! The bathroom door is opening...");
+  
+  // Animate door opening
+  if (this.doorPanel) {
+    const targetRotation = -Math.PI / 2;
+    const duration = 2000;
+    const startTime = performance.now();
+    const startRotation = this.doorPanel.rotation.y;
     
-    this.allowNormalMovement = true;
-    
-    if (this.selectionUI) {
-      this.selectionUI.style.display = 'none';
-    }
-    
-    this.tiles.forEach((tile, index) => {
-      setTimeout(() => {
-        tile.material.color.setHex(0xffd700);
-        tile.material.emissive.setHex(0xffaa00);
-        tile.material.emissiveIntensity = 0.6;
-      }, index * 100);
-    });
-    
-    this.hud.showMessage("🎉 PUZZLE COMPLETE! The bathroom door is opening...");
-    
-    if (this.doorPanel) {
-      const targetRotation = -Math.PI / 2;
-      const duration = 2000;
-      const startTime = performance.now();
-      const startRotation = this.doorPanel.rotation.y;
+    const animateDoor = () => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
       
-      const animateDoor = () => {
-        const elapsed = performance.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        const eased = 1 - Math.pow(1 - progress, 3);
-        
-        this.doorPanel.rotation.y = startRotation + (targetRotation - startRotation) * eased;
-        
-        if (progress < 1) {
-          requestAnimationFrame(animateDoor);
-        }
-      };
+      const eased = 1 - Math.pow(1 - progress, 3);
       
-      setTimeout(animateDoor, 1000);
-    }
+      this.doorPanel.rotation.y = startRotation + (targetRotation - startRotation) * eased;
+      
+      if (progress < 1) {
+        requestAnimationFrame(animateDoor);
+      }
+    };
+    
+    setTimeout(animateDoor, 1000);
+  }
+  
+  // Automatically transition to bathroom after door opens
+  setTimeout(() => {
+    this.hud.showMessage("🚪 Entering the bathroom...");
     
     setTimeout(() => {
-      this.hud.showMessage("🎮 You can now move freely! Walk forward to enter the bathroom...");
-    }, 2500);
-  }
+      this.enterBathroom();
+    }, 1500);
+  }, 3000);
+}
 
-  checkBathroomDoorProximity() {
-    if (!this.player.ghost || !this.bathroomDoor) return;
-    
-    const distance = this.player.ghost.position.distanceTo(this.bathroomDoor.position);
-    
-    if (distance < 4) {
-      this.hud.showMessage("🚪 Press E to enter the bathroom");
-      
-      if (!this.doorKeyListener) {
-        this.doorKeyListener = (e) => {
-          if (e.key === 'e' || e.key === 'E') {
-            this.enterBathroom();
+
+// Replace the enterBathroom function (simplified)
+enterBathroom() {
+  console.log("🛁 Transitioning to bathroom boss fight");
+  
+  if (this.selectionUI && this.selectionUI.parentNode) {
+    this.selectionUI.style.display = 'none';
+  }
+  
+  const fadeOverlay = document.createElement('div');
+  fadeOverlay.style.position = 'fixed';
+  fadeOverlay.style.top = '0';
+  fadeOverlay.style.left = '0';
+  fadeOverlay.style.width = '100%';
+  fadeOverlay.style.height = '100%';
+  fadeOverlay.style.background = 'black';
+  fadeOverlay.style.opacity = '0';
+  fadeOverlay.style.transition = 'opacity 1s';
+  fadeOverlay.style.zIndex = '10000';
+  document.body.appendChild(fadeOverlay);
+  
+  setTimeout(() => {
+    fadeOverlay.style.opacity = '1';
+  }, 100);
+  
+  setTimeout(() => {
+    if (window.transitionToBathroom) {
+      window.transitionToBathroom();
+    }
+    setTimeout(() => {
+      if (fadeOverlay.parentNode) {
+        fadeOverlay.style.opacity = '0';
+        setTimeout(() => {
+          if (fadeOverlay.parentNode) {
+            document.body.removeChild(fadeOverlay);
           }
-        };
-        window.addEventListener('keydown', this.doorKeyListener);
+        }, 1000);
       }
-    } else {
-      if (this.doorKeyListener) {
-        window.removeEventListener('keydown', this.doorKeyListener);
-        this.doorKeyListener = null;
-      }
-    }
-  }
-
-  enterBathroom() {
-    this.hud.showMessage("🛁 Entering the bathroom...");
-    console.log("🛁 Transitioning to bathroom boss fight");
-    
-    if (this.doorKeyListener) {
-      window.removeEventListener('keydown', this.doorKeyListener);
-      this.doorKeyListener = null;
-    }
-    
-    if (this.selectionUI && this.selectionUI.parentNode) {
-      this.selectionUI.style.display = 'none';
-    }
-    
-    const fadeOverlay = document.createElement('div');
-    fadeOverlay.style.position = 'fixed';
-    fadeOverlay.style.top = '0';
-    fadeOverlay.style.left = '0';
-    fadeOverlay.style.width = '100%';
-    fadeOverlay.style.height = '100%';
-    fadeOverlay.style.background = 'black';
-    fadeOverlay.style.opacity = '0';
-    fadeOverlay.style.transition = 'opacity 1s';
-    fadeOverlay.style.zIndex = '10000';
-    document.body.appendChild(fadeOverlay);
-    
-    setTimeout(() => {
-      fadeOverlay.style.opacity = '1';
-    }, 100);
-    
-    setTimeout(() => {
-      if (window.transitionToBathroom) {
-        window.transitionToBathroom();
-      }
-      setTimeout(() => {
-        if (fadeOverlay.parentNode) {
-          fadeOverlay.style.opacity = '0';
-          setTimeout(() => {
-            if (fadeOverlay.parentNode) {
-              document.body.removeChild(fadeOverlay);
-            }
-          }, 1000);
-        }
-      }, 500);
-    }, 1000);
-  }
+    }, 500);
+  }, 1000);
+}
 
   animateTiles(delta) {
     const time = this.clock.elapsedTime;
@@ -1479,23 +1457,45 @@ export default class HallwayScene {
     window.addEventListener('keydown', startPuzzle);
   }
 
-  updateWithCameraRotation(yaw, pitch) {
-    const delta = this.clock.getDelta();
+// Replace updateWithCameraRotation function (simplified)
+updateWithCameraRotation(yaw, pitch) {
+  const delta = this.clock.getDelta();
 
-    if (this.player) {
-      this.player.update();
-    }
-
-    this.updateTileHighlights();
-    this.animateTiles(delta);
-    
-    if (this.puzzleComplete) {
-      this.checkBathroomDoorProximity();
-    }
-
-    this.renderer.render(this.scene, this.camera);
+  if (this.player) {
+    this.player.update();
   }
 
+  // Only update tile highlights if puzzle is not complete
+  if (!this.puzzleComplete) {
+    this.updateTileHighlights();
+  }
+  
+  this.animateTiles(delta);
+
+  this.renderer.render(this.scene, this.camera);
+}
+
+// Replace dispose function (simplified)
+dispose() {
+  if (this.arrowKeyHandler) {
+    window.removeEventListener('keydown', this.arrowKeyHandler);
+  }
+  
+  if (this.selectionUI && this.selectionUI.parentNode) {
+    document.body.removeChild(this.selectionUI);
+  }
+  
+  this.tiles.forEach(tile => {
+    tile.geometry.dispose();
+    tile.material.dispose();
+    tile.children.forEach(child => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) child.material.dispose();
+    });
+  });
+  
+  console.log("🧹 Hallway scene cleaned up");
+}
   update() {
     this.updateWithCameraRotation(0, 0);
   }

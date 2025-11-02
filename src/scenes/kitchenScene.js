@@ -1352,175 +1352,155 @@ createDeathParticles() {
 }
 
 // NEW: Enhanced restart menu with stats
-showRestartMenu() {
-  console.log("📋 Showing restart menu...");
+restartKitchen() {
+  console.log("🔄 Restarting Kitchen Scene (self-contained)...");
   
-  const overlay = document.createElement("div");
-  overlay.id = "restart-menu-overlay";
-  overlay.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: linear-gradient(180deg, rgba(20,0,0,0.95) 0%, rgba(60,0,0,0.98) 100%);
-    display: flex; flex-direction: column;
-    justify-content: center; align-items: center; z-index: 10000;
-    font-family: 'Arial Black', Arial, sans-serif;
-    animation: fadeIn 0.5s ease-out;
-  `;
-
-  // Add CSS animations
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-    @keyframes glow { 
-      0%, 100% { text-shadow: 0 0 20px #ff0000, 0 0 40px #ff0000; } 
-      50% { text-shadow: 0 0 40px #ff0000, 0 0 80px #ff0000, 0 0 100px #ff4400; } 
+  // Remove the game over overlay
+  const overlay = document.getElementById("restart-menu-overlay");
+  if (overlay) overlay.remove();
+  
+  // Reset game state flags
+  this.gameOver = false;
+  this.currentPhase = "intro";
+  this.objectsDestroyed = 0;
+  this.combatActive = false;
+  this.combatTarget = null;
+  this.combatTargetHealth = 3;
+  this.combatMisses = 0;
+  this.selectedObject = null;
+  
+  // Clean up UI elements
+  if (this.objectiveHUD) {
+    this.objectiveHUD.remove();
+    this.objectiveHUD = null;
+  }
+  if (this.combatHUD) {
+    this.combatHUD.remove();
+    this.combatHUD = null;
+  }
+  const hint = document.getElementById("object-hint");
+  if (hint) hint.remove();
+  
+  // Clean up boss if exists
+  if (this.kitchenGhost) {
+    if (this.kitchenGhost.mesh) {
+      this.scene.remove(this.kitchenGhost.mesh);
     }
-    .restart-btn:hover { 
-      transform: scale(1.1) !important; 
-      box-shadow: 0 8px 30px rgba(255, 68, 0, 0.9) !important;
-      background: linear-gradient(to bottom, #ff9900, #ff5500) !important;
+    if (this.kitchenGhost.projectiles) {
+      this.kitchenGhost.projectiles.forEach(proj => {
+        if (proj.parent) this.scene.remove(proj);
+      });
     }
-  `;
-  document.head.appendChild(style);
-
-  // Calculate stats
-  const possessedFound = this.objectsDestroyed;
-  const possessedTotal = this.objectsToDestroy;
-  const bossHealthPercent = this.kitchenGhost ? 
-    Math.round((this.kitchenGhost.health / this.kitchenGhost.maxHealth) * 100) : 100;
-
-  overlay.innerHTML = `
-    <div style="text-align: center; max-width: 700px; padding: 40px;">
-      <!-- Skull Icon -->
-      <div style="font-size: 120px; margin-bottom: 20px; animation: pulse 2s infinite;">
-        💀
-      </div>
-      
-      <!-- Game Over Title -->
-      <h1 style="
-        color: #ff0000; font-size: 82px; margin: 0 0 10px 0;
-        animation: glow 2s infinite;
-        letter-spacing: 4px;
-      ">GAME OVER</h1>
-      
-      <p style="
-        color: #ffaa00; font-size: 26px; margin: 0 0 40px 0;
-        font-family: Arial, sans-serif; font-style: italic;
-        text-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
-      ">The kitchen claimed another victim...</p>
-      
-      <!-- Stats Panel -->
-      <div style="
-        background: rgba(0, 0, 0, 0.7); 
-        border: 3px solid #ff4400;
-        border-radius: 15px; 
-        padding: 30px;
-        margin-bottom: 40px;
-        box-shadow: 0 0 30px rgba(255, 68, 0, 0.4);
-      ">
-        <h3 style="color: #ff6600; font-size: 28px; margin: 0 0 20px 0; letter-spacing: 2px;">
-          YOUR PERFORMANCE
-        </h3>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left;">
-          <div style="background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 8px;">
-            <div style="color: #aaaaaa; font-size: 14px; margin-bottom: 5px;">Possessed Objects</div>
-            <div style="color: #ffaa00; font-size: 32px; font-weight: bold;">
-              ${possessedFound}/${possessedTotal}
-            </div>
-          </div>
-          
-          <div style="background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 8px;">
-            <div style="color: #aaaaaa; font-size: 14px; margin-bottom: 5px;">Boss Health Remaining</div>
-            <div style="color: ${bossHealthPercent < 50 ? '#00ff00' : '#ff6600'}; font-size: 32px; font-weight: bold;">
-              ${bossHealthPercent}%
-            </div>
-          </div>
-        </div>
-        
-        <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid rgba(255, 68, 0, 0.3);">
-          <div style="color: #ff4444; font-size: 18px;">
-            ${this.getDeathMessage()}
-          </div>
-        </div>
-      </div>
-      
-      <!-- Buttons -->
-      <div style="display: flex; gap: 20px; justify-content: center;">
-        <button id="restart-btn" class="restart-btn" style="
-          padding: 18px 45px; font-size: 24px; font-weight: bold;
-          color: white; 
-          background: linear-gradient(to bottom, #ff7700, #ff4400);
-          border: 3px solid #ffaa00; border-radius: 12px;
-          cursor: pointer;
-          box-shadow: 0 5px 20px rgba(255, 68, 0, 0.6);
-          transition: all 0.3s;
-          text-transform: uppercase;
-          letter-spacing: 2px;
-        ">
-          🔄 Restart Kitchen
-        </button>
-        
-        <button id="main-menu-btn" class="restart-btn" style="
-          padding: 18px 45px; font-size: 24px; font-weight: bold;
-          color: white; 
-          background: linear-gradient(to bottom, #555555, #333333);
-          border: 3px solid #888888; border-radius: 12px;
-          cursor: pointer;
-          box-shadow: 0 5px 20px rgba(0, 0, 0, 0.6);
-          transition: all 0.3s;
-          text-transform: uppercase;
-          letter-spacing: 2px;
-        ">
-          🏠 Main Menu
-        </button>
-      </div>
-      
-      <!-- Tip -->
-      <div style="
-        margin-top: 30px; padding: 15px;
-        background: rgba(255, 170, 0, 0.1);
-        border: 2px solid rgba(255, 170, 0, 0.3);
-        border-radius: 10px;
-      ">
-        <p style="color: #ffaa00; font-size: 16px; margin: 0; font-family: Arial, sans-serif;">
-          💡 <strong>TIP:</strong> ${this.getRandomTip()}
-        </p>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-  
-  // FIXED: Button handlers with proper event handling
-  const restartBtn = document.getElementById("restart-btn");
-  const mainMenuBtn = document.getElementById("main-menu-btn");
-  
-  if (restartBtn) {
-    restartBtn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      console.log("🔄 Restart button clicked!");
-      overlay.remove();
-      window.location.reload();
-    };
+    this.kitchenGhost = null;
+    this.scene.userData.kitchenGhost = null;
   }
   
-  if (mainMenuBtn) {
-    mainMenuBtn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      console.log("🏠 Main menu button clicked!");
-      overlay.remove();
-      if (window.returnToMainMenu) {
-        window.returnToMainMenu();
-      } else {
-        window.location.href = '/';
-      }
-    };
+  // Remove boss health bar
+  if (this.bossHealthFill && this.bossHealthFill.parentElement) {
+    const healthBar = this.bossHealthFill.parentElement.parentElement;
+    if (healthBar && healthBar.parentElement) {
+      healthBar.remove();
+    }
+    this.bossHealthFill = null;
   }
   
-  console.log("✅ Restart menu created with working buttons");
+  // Clean up all interactive objects
+  this.interactiveObjects.forEach(obj => {
+    if (obj.parent) this.scene.remove(obj);
+  });
+  this.interactiveObjects = [];
+  this.possessedObjects = [];
+  this.correctPossessedIndices = [];
+  
+  // Clean up all particles
+  this.smokeParticles.forEach(smoke => {
+    if (smoke.parent) this.scene.remove(smoke);
+  });
+  this.smokeParticles = [];
+  
+  // Reset player (but don't reload models)
+  if (this.player) {
+    this.player.health.current = this.player.health.max;
+    this.player._isDead = false;
+    this.player.canShoot = true;
+    
+    // Reset player position
+    if (this.player.ghost) {
+      this.player.ghost.position.set(0, 0.8, 5);
+      this.player.ghost.rotation.set(0, 0, 0);
+    }
+    
+    // Update HUD
+    if (this.player.hud) {
+      this.player.hud.updatePlayerHearts(
+        this.player.health.current,
+        this.player.health.max
+      );
+    }
+    
+    // Exit combat mode if active
+    if (this.player.combatMode) {
+      this.player.exitCombat();
+    }
+  }
+  
+  // Reset lighting
+  this.ovenLight.intensity = 1.2;
+  this.ovenLight.color.setHex(0xff4400);
+  this.mainLight.intensity = 1.8;
+  
+  // Reset atmospheric lights
+  this.atmosphericLights.forEach(light => {
+    light.intensity = 0;
+    light.userData.targetIntensity = 0;
+  });
+  
+  // Recreate interactive objects
+  console.log("♻️ Recreating interactive objects...");
+  this.createInteractiveObjects().then(() => {
+    console.log("✅ Kitchen scene restarted!");
+    
+    // Restart the intro sequence
+    setTimeout(() => {
+      this.startIntroPhase();
+    }, 500);
+  });
+  
+  // Re-enable mouse click handler for investigation
+  if (!this.clickHandler) {
+    this.setupMouseInteraction();
+  }
+  
+  // Request pointer lock
+  setTimeout(() => {
+    if (!document.pointerLockElement) {
+      document.body.requestPointerLock();
+    }
+  }, 1000);
+}
+
+// Helper methods (keep these as they are)
+getDeathMessage() {
+  const messages = [
+    "The possessed objects were too strong!",
+    "You couldn't withstand the kitchen's curse!",
+    "The Kitchen Ghost's power overwhelmed you!",
+    "Your investigation came to a tragic end!",
+    "The haunted kitchen has claimed you!"
+  ];
+  return messages[Math.floor(Math.random() * messages.length)];
+}
+
+getRandomTip() {
+  const tips = [
+    "Hover over objects to see if they glow purple - those are possessed!",
+    "Each wrong choice costs you health. Choose carefully!",
+    "Missing 3 shots lets the object escape AND costs health!",
+    "Destroy all 3 possessed objects to face the Kitchen Ghost!",
+    "Keep your distance from the boss when it starts chasing you!",
+    "Watch for the object's glow when you aim at it!"
+  ];
+  return tips[Math.floor(Math.random() * tips.length)];
 }
 
 // NEW: Random death messages
