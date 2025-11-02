@@ -16,26 +16,26 @@ export default class BathroomBoss {
       this.debug = physicsOrOpts.debug || false;
     }
 
-    this.health = 80;
-    this.maxHealth = 80;
+    this.health = 190;
+    this.maxHealth = 190;
     this.isAlive = true;
     this.defeated = false;
     this.defeatedHandled = false;
 
     this.projectiles = [];
     this.shootCooldown = 0;
-    this.shootInterval = 3.0;
+    this.shootInterval = 3; // Faster shooting than bellboy
 
     // Enhanced movement mechanics - random 3D movement
     this.isMoving = true;
     this.moveSpeed = 0.03;
     this.movementBounds = {
-      minX: 3,    // Right wall position
+      minX: 3, // Right wall position
       maxX: 8,
-      minY: 0.2,  // Lower bounds to avoid floor
-      maxY: 2.5,  // Lower max to avoid ceiling
-      minZ: 5,    // Front boundary
-      maxZ: 10    // Back boundary (near wall)
+      minY: 0.2, // Lower bounds to avoid floor
+      maxY: 2.5, // Lower max to avoid ceiling
+      minZ: 5, // Front boundary
+      maxZ: 10, // Back boundary (near wall)
     };
 
     // Random movement system
@@ -44,10 +44,10 @@ export default class BathroomBoss {
       changeDirectionTimer: 0,
       changeDirectionInterval: 1.8, // Change direction every 1.8 seconds
       currentDirection: new THREE.Vector3(
-        (Math.random() - 0.5) * 2,  // left/right
-        (Math.random() - 0.5) * 2,  // up/down
-        (Math.random() - 0.5) * 1   // forward/back (smaller range)
-      ).normalize()
+        (Math.random() - 0.5) * 2, // left/right
+        (Math.random() - 0.5) * 2, // up/down
+        (Math.random() - 0.5) * 1 // forward/back (smaller range)
+      ).normalize(),
     };
 
     // Eyes glow effect
@@ -63,7 +63,7 @@ export default class BathroomBoss {
   }
 
   loadBossModel() {
-    const modelPath = '/assets/models/evilgoatee.glb';
+    const modelPath = "/assets/models/evilgoatee.glb";
 
     this.gltfLoader.load(
       modelPath,
@@ -79,7 +79,6 @@ export default class BathroomBoss {
         this.modelRotationOffset = -Math.PI / 2; // 90 degrees - adjust if model still faces wrong way
         this.bossModel.rotation.y = this.modelRotationOffset;
 
-
         // Face the player initially (assuming player is at origin)
         //this.bossModel.lookAt(0, this.bossModel.position.y, 0);
 
@@ -94,8 +93,10 @@ export default class BathroomBoss {
             child.frustumCulled = false;
             if (child.geometry) {
               try {
-                if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
-                if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+                if (!child.geometry.boundingSphere)
+                  child.geometry.computeBoundingSphere();
+                if (!child.geometry.boundingBox)
+                  child.geometry.computeBoundingBox();
               } catch (e) {
                 // ignore geometry compute errors
               }
@@ -104,13 +105,6 @@ export default class BathroomBoss {
         });
 
         this.scene.add(this.bossModel);
-        // After: this.scene.add(this.bossModel);
-            this.bossModel.userData.isBoss = true; // ← ADD THIS LINE
-            this.bossModel.traverse((child) => {
-            if (child.isMesh) {
-                child.userData.isBoss = true; // ← Also mark all child meshes
-            }
-            });
         console.log("🐐 Evil Goatee Boss loaded and positioned!");
         console.log("Boss position:", this.bossModel.position);
         console.log("Boss scale:", this.bossModel.scale);
@@ -128,13 +122,16 @@ export default class BathroomBoss {
           console.log("Boss bounding box:", box);
           console.log("Boss size:", box.getSize(new THREE.Vector3()));
           console.log("Left eye light position:", this.leftEyeLight?.position);
-          console.log("Right eye light position:", this.rightEyeLight?.position);
+          console.log(
+            "Right eye light position:",
+            this.rightEyeLight?.position
+          );
         };
       },
       // Progress callback
       (xhr) => {
         if (this.debug) {
-          console.log(`Boss model: ${(xhr.loaded / xhr.total * 100)}% loaded`);
+          console.log(`Boss model: ${(xhr.loaded / xhr.total) * 100}% loaded`);
         }
       },
       // Error callback
@@ -148,7 +145,6 @@ export default class BathroomBoss {
 
   createFallbackBoss() {
     console.log("Creating fallback boss mesh...");
-    this.bossModel.userData.isBoss = true; // ← ADD THIS
 
     // Create a simple goat-like shape
     const bodyGeometry = new THREE.CapsuleGeometry(0.8, 2, 4, 8);
@@ -157,7 +153,7 @@ export default class BathroomBoss {
       emissive: 0x1a1a1a,
       emissiveIntensity: 0.3,
       metalness: 0.1,
-      roughness: 0.8
+      roughness: 0.8,
     });
 
     this.bossModel = new THREE.Mesh(bodyGeometry, bodyMaterial);
@@ -167,8 +163,10 @@ export default class BathroomBoss {
     // Set up geometry for raycasting
     if (this.bossModel.geometry) {
       try {
-        if (!this.bossModel.geometry.boundingSphere) this.bossModel.geometry.computeBoundingSphere();
-        if (!this.bossModel.geometry.boundingBox) this.bossModel.geometry.computeBoundingBox();
+        if (!this.bossModel.geometry.boundingSphere)
+          this.bossModel.geometry.computeBoundingSphere();
+        if (!this.bossModel.geometry.boundingBox)
+          this.bossModel.geometry.computeBoundingBox();
       } catch (e) {
         // ignore geometry compute errors
       }
@@ -190,16 +188,19 @@ export default class BathroomBoss {
 
     if (this.bossModel) {
       this.bossModel.traverse((child) => {
-        if (child.isMesh && child.name &&
-            (child.name.toLowerCase().includes('eye') ||
-             child.name.toLowerCase().includes('pupil'))) {
+        if (
+          child.isMesh &&
+          child.name &&
+          (child.name.toLowerCase().includes("eye") ||
+            child.name.toLowerCase().includes("pupil"))
+        ) {
           // Found existing eyes in the model
           child.material = new THREE.MeshStandardMaterial({
             color: 0xff0000,
             emissive: 0xff0000,
             emissiveIntensity: this.eyeGlowIntensity,
             transparent: true,
-            opacity: 0.9
+            opacity: 0.9,
           });
           foundEyes = true;
           console.log("👁️ Found and enhanced existing eye:", child.name);
@@ -215,14 +216,14 @@ export default class BathroomBoss {
         emissive: 0xff0000,
         emissiveIntensity: this.eyeGlowIntensity,
         transparent: true,
-        opacity: 0.9
+        opacity: 0.9,
       });
 
       // Position eyes in LOCAL coordinates relative to the model
       // Since we're adding to bossModel, use local positions (0,0,0 is model center)
       this.leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial.clone());
       this.leftEye.position.set(-0.3, 4.3, -0.5); // Left, up, forward in local space
-      this.leftEye.rotation.y = Math.PI / 2;   // 90 degrees
+      this.leftEye.rotation.y = Math.PI / 2; // 90 degrees
       this.bossModel.add(this.leftEye);
 
       this.rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial.clone());
@@ -250,7 +251,8 @@ export default class BathroomBoss {
   }
 
   shoot() {
-    if (!this.player || !this.player.ghost || !this.isAlive || !this.bossModel) return;
+    if (!this.player || !this.player.ghost || !this.isAlive || !this.bossModel)
+      return;
 
     // Create dark energy projectile
     const projectileGeometry = new THREE.SphereGeometry(0.2, 12, 12);
@@ -259,7 +261,7 @@ export default class BathroomBoss {
       emissive: 0x8b0000,
       emissiveIntensity: 1.2,
       transparent: true,
-      opacity: 0.8
+      opacity: 0.8,
     });
 
     const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
@@ -270,19 +272,23 @@ export default class BathroomBoss {
     projectile.position.y += 1.0; // Raise to roughly chest level of the boss
 
     // Move projectile slightly toward player so it appears to come from boss front
-    const toPlayer = new THREE.Vector3().subVectors(this.player.ghost.position, this.bossModel.position).normalize();
+    const toPlayer = new THREE.Vector3()
+      .subVectors(this.player.ghost.position, this.bossModel.position)
+      .normalize();
     projectile.position.add(toPlayer.multiplyScalar(0.5)); // Slightly toward player
 
     // Direction to player's ghost
     const targetPos = this.player.ghost.position.clone();
-    const dir = new THREE.Vector3().subVectors(targetPos, projectile.position).normalize();
+    const dir = new THREE.Vector3()
+      .subVectors(targetPos, projectile.position)
+      .normalize();
     projectile.userData.velocity = dir.multiplyScalar(0.3); // Faster projectiles
 
     // Add rotation and pulsing effect
     projectile.userData.rotationSpeed = {
       x: (Math.random() - 0.5) * 0.2,
       y: (Math.random() - 0.5) * 0.2,
-      z: (Math.random() - 0.5) * 0.2
+      z: (Math.random() - 0.5) * 0.2,
     };
 
     // Lifetime management
@@ -295,47 +301,49 @@ export default class BathroomBoss {
     if (this.debug) console.log("Bathroom boss shot dark energy!");
   }
 
-takeDamage(amount) {
-  if (!this.isAlive) return;
-  this.health = Math.max(0, this.health - amount);
-  console.log(`Bathroom Boss took ${amount} damage! Health: ${this.health}/${this.maxHealth}`);
+  takeDamage(amount) {
+    if (!this.isAlive) return;
+    this.health = Math.max(0, this.health - amount);
+    console.log(
+      `🔥 Bathroom Boss took ${amount} damage! Health: ${this.health}/${
+        this.maxHealth
+      } (${Math.round((this.health / this.maxHealth) * 100)}%)`
+    );
 
-  // ADD THIS BLOCK
-  if (this.hud?.updateBossHealth) {
-    const percent = (this.health / this.maxHealth) * 100;
-    this.hud.updateBossHealth(percent);
-    console.log(`Boss HUD updated: ${percent.toFixed(1)}%`);
+    // Flash effect when taking damage
+    if (this.bossModel) {
+      this.bossModel.traverse((child) => {
+        if (child.isMesh && child.material) {
+          const originalColor = child.material.color.clone();
+          child.material.color.setHex(0xff0000); // Flash red instead of white
+          setTimeout(() => {
+            child.material.color.copy(originalColor);
+          }, 150);
+        }
+      });
+
+      // Shake effect
+      const originalPosition = this.bossModel.position.clone();
+      const shakeAmount = 0.1;
+      this.bossModel.position.add(
+        new THREE.Vector3(
+          (Math.random() - 0.5) * shakeAmount,
+          (Math.random() - 0.5) * shakeAmount,
+          (Math.random() - 0.5) * shakeAmount
+        )
+      );
+
+      setTimeout(() => {
+        if (this.bossModel) {
+          this.bossModel.position.copy(originalPosition);
+        }
+      }, 150);
+    }
+
+    if (this.health <= 0) {
+      this.die();
+    }
   }
-
-  // Flash effect...
-  if (this.bossModel) {
-    this.bossModel.traverse((child) => {
-      if (child.isMesh && child.material) {
-        const originalColor = child.material.color.clone();
-        child.material.color.setHex(0xff0000);
-        setTimeout(() => {
-          child.material.color.copy(originalColor);
-        }, 150);
-      }
-    });
-
-    // Shake
-    const originalPosition = this.bossModel.position.clone();
-    const shake = 0.1;
-    this.bossModel.position.add(new THREE.Vector3(
-      (Math.random() - 0.5) * shake,
-      (Math.random() - 0.5) * shake,
-      (Math.random() - 0.5) * shake
-    ));
-    setTimeout(() => {
-      this.bossModel.position.copy(originalPosition);
-    }, 150);
-  }
-
-  if (this.health <= 0) {
-    this.die();
-  }
-}
 
   die() {
     if (!this.isAlive) return;
@@ -360,8 +368,10 @@ takeDamage(amount) {
           clearInterval(fadeOut);
           this.scene.remove(this.bossModel);
           // Remove projectiles
-          this.projectiles.forEach(p => {
-            try { this.scene.remove(p); } catch (e) {}
+          this.projectiles.forEach((p) => {
+            try {
+              this.scene.remove(p);
+            } catch (e) {}
           });
           this.projectiles = [];
         }
@@ -380,34 +390,61 @@ takeDamage(amount) {
       if (this.randomMovement.changeDirectionTimer <= 0) {
         // Choose new random direction
         this.randomMovement.currentDirection = new THREE.Vector3(
-          (Math.random() - 0.5) * 2,  // left/right
-          (Math.random() - 0.5) * 2,  // up/down
-          (Math.random() - 0.5) * 1   // forward/back (smaller range)
+          (Math.random() - 0.5) * 2, // left/right
+          (Math.random() - 0.5) * 2, // up/down
+          (Math.random() - 0.5) * 1 // forward/back (smaller range)
         ).normalize();
 
-        this.randomMovement.changeDirectionTimer = this.randomMovement.changeDirectionInterval;
-        console.log("🎲 Boss changed direction:", this.randomMovement.currentDirection);
+        this.randomMovement.changeDirectionTimer =
+          this.randomMovement.changeDirectionInterval;
+        console.log(
+          "🎲 Boss changed direction:",
+          this.randomMovement.currentDirection
+        );
       }
 
       // Calculate new position
       const newPosition = this.bossModel.position.clone();
-      const movement = this.randomMovement.currentDirection.clone().multiplyScalar(this.moveSpeed);
+      const movement = this.randomMovement.currentDirection
+        .clone()
+        .multiplyScalar(this.moveSpeed);
       newPosition.add(movement);
 
       // Boundary checking with direction reversal
-      if (newPosition.x >= this.movementBounds.maxX || newPosition.x <= this.movementBounds.minX) {
+      if (
+        newPosition.x >= this.movementBounds.maxX ||
+        newPosition.x <= this.movementBounds.minX
+      ) {
         this.randomMovement.currentDirection.x *= -1;
-        newPosition.x = THREE.MathUtils.clamp(newPosition.x, this.movementBounds.minX, this.movementBounds.maxX);
+        newPosition.x = THREE.MathUtils.clamp(
+          newPosition.x,
+          this.movementBounds.minX,
+          this.movementBounds.maxX
+        );
       }
 
-      if (newPosition.y >= this.movementBounds.maxY || newPosition.y <= this.movementBounds.minY) {
+      if (
+        newPosition.y >= this.movementBounds.maxY ||
+        newPosition.y <= this.movementBounds.minY
+      ) {
         this.randomMovement.currentDirection.y *= -1;
-        newPosition.y = THREE.MathUtils.clamp(newPosition.y, this.movementBounds.minY, this.movementBounds.maxY);
+        newPosition.y = THREE.MathUtils.clamp(
+          newPosition.y,
+          this.movementBounds.minY,
+          this.movementBounds.maxY
+        );
       }
 
-      if (newPosition.z >= this.movementBounds.maxZ || newPosition.z <= this.movementBounds.minZ) {
+      if (
+        newPosition.z >= this.movementBounds.maxZ ||
+        newPosition.z <= this.movementBounds.minZ
+      ) {
         this.randomMovement.currentDirection.z *= -1;
-        newPosition.z = THREE.MathUtils.clamp(newPosition.z, this.movementBounds.minZ, this.movementBounds.maxZ);
+        newPosition.z = THREE.MathUtils.clamp(
+          newPosition.z,
+          this.movementBounds.minZ,
+          this.movementBounds.maxZ
+        );
       }
 
       // Apply movement
@@ -419,7 +456,10 @@ takeDamage(amount) {
       const playerPos = this.player.ghost.position;
       const bossPos = this.bossModel.position;
       // Calculate angle to player
-      const angleToPlayer = Math.atan2(playerPos.x - bossPos.x, playerPos.z - bossPos.z);
+      const angleToPlayer = Math.atan2(
+        playerPos.x - bossPos.x,
+        playerPos.z - bossPos.z
+      );
       // Apply the model's rotation offset so its face points at player
       this.bossModel.rotation.y = angleToPlayer + this.modelRotationOffset;
     }
@@ -429,7 +469,8 @@ takeDamage(amount) {
     if (!this.leftEye || !this.rightEye) return;
 
     // Pulsing glow effect
-    const pulseIntensity = this.eyeGlowIntensity + Math.sin(time * this.eyePulseSpeed) * 0.5;
+    const pulseIntensity =
+      this.eyeGlowIntensity + Math.sin(time * this.eyePulseSpeed) * 0.5;
 
     this.leftEye.material.emissiveIntensity = pulseIntensity;
     this.rightEye.material.emissiveIntensity = pulseIntensity;
@@ -478,14 +519,21 @@ takeDamage(amount) {
       // Age management
       proj.userData.age = (proj.userData.age || 0) + delta;
       if (proj.userData.age > (proj.userData.maxAge || 8)) {
-        try { this.scene.remove(proj); } catch (e) {}
+        try {
+          this.scene.remove(proj);
+        } catch (e) {}
         this.projectiles.splice(i, 1);
         continue;
       }
 
       // Remove if too far
-      if (this.bossModel && proj.position.distanceTo(this.bossModel.position) > 100) {
-        try { this.scene.remove(proj); } catch (e) {}
+      if (
+        this.bossModel &&
+        proj.position.distanceTo(this.bossModel.position) > 100
+      ) {
+        try {
+          this.scene.remove(proj);
+        } catch (e) {}
         this.projectiles.splice(i, 1);
       }
     }

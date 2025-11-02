@@ -6,6 +6,7 @@ import BathroomBoss from "../entities/bathroomBoss.js";
 import Inventory from "../systems/inventory.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { createDustParticles, updateDustParticles } from "../core/filters.js";
+import CutsceneManager from "../systems/cutsceneManager.js";
 
 export default class BathroomScene {
   constructor(renderer, camera) {
@@ -41,11 +42,16 @@ export default class BathroomScene {
     this.toiletPaper = null;
     this.pickupPromptShown = false;
 
+    // CUTSCENE SYSTEM
+    this.initCutsceneContainer();
+    this.cutsceneMgr = new CutsceneManager("cutscene-container");
+    this.isPaused = false;
+
     this.loadBathroomEnvironment();
 
     // Dark lighting setup for boss fight
-    this.ambientLight = new THREE.AmbientLight(0x404040, 0.1); // Very dark ambient
-    this.directionalLight = new THREE.DirectionalLight(0x404040, 0.2); // Dim directional
+    this.ambientLight = new THREE.AmbientLight(0x404040, 0.1);
+    this.directionalLight = new THREE.DirectionalLight(0x404040, 0.2);
     this.directionalLight.position.set(5, 10, 5);
     this.directionalLight.castShadow = true;
 
@@ -54,14 +60,13 @@ export default class BathroomScene {
     // Dark background
     this.scene.background = new THREE.Color(0x0a0a0a);
 
-    const TORCH_COLOR = 0xfff4da; // warm-white LED
-    const TORCH_INTENSITY = 5.5; // brighter
-    const TORCH_DISTANCE = 35; // how far light travels
-    const TORCH_ANGLE_DEG = 18; // narrower cone for punch
-    const TORCH_PENUMBRA = 0.55; // softer edge
-    const TORCH_DECAY = 2.0; // realistic falloff
+    const TORCH_COLOR = 0xfff4da;
+    const TORCH_INTENSITY = 5.5;
+    const TORCH_DISTANCE = 35;
+    const TORCH_ANGLE_DEG = 18;
+    const TORCH_PENUMBRA = 0.55;
+    const TORCH_DECAY = 2.0;
 
-    // Create torch light (initially off)
     this.torchLight = new THREE.SpotLight(
       TORCH_COLOR,
       TORCH_INTENSITY,
@@ -82,44 +87,155 @@ export default class BathroomScene {
     // Player
     this.player = new Player(this.scene, this.camera, this.hud);
 
-    this.camera.position.y = 2.5; // <-- higher up
+    this.camera.position.y = 2.5;
 
     this.player.loadGhost("/public/assets/models/mainchar.glb").then(() => {
       if (this.player.ghost) {
-        // Position player higher to align with camera height (2.5)
         this.player.ghost.position.set(0, 2.5, 10);
-
-        // Make ghost invisible in first-person
         this.player.ghost.visible = false;
-
-        console.log("✅ Player positioned in bathroom (first-person mode)");
+        console.log("Player positioned in bathroom (first-person mode)");
       }
     });
 
-    // Load gun first, then enter combat mode
     this.player.loadGun("/public/assets/models/gun.glb").then(() => {
       if (this.player.gun) {
-        console.log("✅ Gun loaded for bathroom scene");
-
-        // NOW enter combat mode after gun is loaded
+        console.log("Gun loaded for bathroom scene");
         this.player.enterCombat();
         this.spawnBoss();
       }
     });
 
-    // Global reference for debugging
     window.bathroomScene = this;
-
     this.gameOver = false;
 
-    // Setup UI prompts
     this.setupUI();
 
-    console.log("🛁 Bathroom scene initialized in first-person mode");
+    console.log("Bathroom scene initialized in first-person mode");
+
+    // INTRO CUTSCENE
+    this.playIntroCutscene();
   }
 
+  // -----------------------------------------------------------------
+  // CUTSCENE SYSTEM – HIDES ALL HUD ELEMENTS WITHOUT CHANGING HUD.js
+  // -----------------------------------------------------------------
+  initCutsceneContainer() {
+    let container = document.getElementById("cutscene-container");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "cutscene-container";
+      Object.assign(container.style, {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        zIndex: 9999,
+        display: "none",
+        pointerEvents: "auto",
+        backgroundColor: "black",
+      });
+      document.body.appendChild(container);
+    }
+  }
+
+  async playIntroCutscene() {
+    const intro = [
+      {
+        image: "/assets/cutscenes/scene1.jpg",
+        text: "text",
+      },
+      {
+        image: "/assets/cutscenes/scene1.jpg",
+        text: "text",
+      },
+    ];
+
+    this.hideAllHUDElements(); // ← HIDE ALL HUD
+    this.isPaused = true;
+    await this.cutsceneMgr.play(intro);
+    this.isPaused = false;
+    this.showAllHUDElements(); // ← RESTORE
+  }
+
+  async playVictoryCutscene() {
+    const victory = [
+      {
+        image: "/assets/cutscenes/scene1.jpg",
+        text: "text",
+      },
+      {
+        image: "/assets/cutscenes/scene1.jpg",
+        text: "text",
+      },
+    ];
+
+    this.hideAllHUDElements(); // ← HIDE ALL HUD
+    this.isPaused = true;
+    await this.cutsceneMgr.play(victory);
+    this.isPaused = false;
+    this.showAllHUDElements(); // ← RESTORE
+  }
+
+  // -----------------------------------------------------------------
+  // DYNAMIC HUD VISIBILITY (NO HUD.js CHANGES)
+  // -----------------------------------------------------------------
+  hideAllHUDElements() {
+    // Store original display values so we can restore them
+    this._hudDisplayCache = [];
+
+    const selectors = [
+      "#tutorial-text", // if you have one
+      ".player-hearts", // if you add a class
+      "[style*='bottom: 20px'][style*='left: 20px']", // hearts container
+      "[style*='top: 30px'][style*='left: 50%']", // boss bar
+      "#boss-health-bar", // if you add an ID
+      "div[style*='position: absolute'][style*='color: white']", // tutorial
+    ];
+
+    // Also target known HUD elements directly
+    document
+      .querySelectorAll(
+        `
+      div[style*="position"],
+      span[style*="color: red"],
+      div[style*="border: 2px solid white"]
+    `
+      )
+      .forEach((el) => {
+        if (
+          el.textContent.includes("❤️") ||
+          el.textContent.includes("Bellboy") ||
+          el.textContent.includes("Bathroom") ||
+          el.style.top === "20%" ||
+          el.style.bottom === "20px" ||
+          el.style.top === "30px"
+        ) {
+          this._hudDisplayCache.push({ el, display: el.style.display });
+          el.style.display = "none";
+        }
+      });
+  }
+
+  showAllHUDElements() {
+    if (!this._hudDisplayCache) return;
+    this._hudDisplayCache.forEach(({ el, display }) => {
+      el.style.display = display || "block";
+    });
+    this._hudDisplayCache = null;
+  }
+
+  // PUBLIC: Call from boss when defeated
+  bossDefeated() {
+    if (this.victoryShown) return;
+    this.victoryShown = true;
+    this.playVictoryCutscene();
+  }
+
+  // -----------------------------------------------------------------
+  // UI
+  // -----------------------------------------------------------------
   setupUI() {
-    // Create torch prompt element
     this.torchPromptElement = document.createElement("div");
     this.torchPromptElement.id = "torch-prompt";
     this.torchPromptElement.innerHTML = "Press E to turn on torch!";
@@ -137,7 +253,6 @@ export default class BathroomScene {
       animation: pulse 1s infinite;
     `;
 
-    // Add pulsing animation
     const style = document.createElement("style");
     style.textContent = `
       @keyframes pulse {
@@ -149,10 +264,13 @@ export default class BathroomScene {
     document.body.appendChild(this.torchPromptElement);
   }
 
+  // -----------------------------------------------------------------
+  // BOSS & GAME LOGIC
+  // -----------------------------------------------------------------
   spawnBoss() {
     if (this.bossSpawned) return;
 
-    console.log("🐐 Spawning Bathroom Boss...");
+    console.log("Spawning Bathroom Boss...");
     this.boss = new BathroomBoss(
       this.scene,
       this.player,
@@ -161,217 +279,130 @@ export default class BathroomScene {
     );
     this.bossSpawned = true;
 
-    // Store boss reference in scene for player shooting system
     this.scene.userData.boss = this.boss;
     this.scene.userData.bathroomScene = this;
 
-    // Start the sequence after a short delay
-    setTimeout(() => {
-      this.startBossFight();
-    }, 1000);
+    setTimeout(() => this.startBossFight(), 1000);
   }
 
   startBossFight() {
-    console.log("🔥 Boss fight started!");
-
-    // Create boss health bar with custom label
-    this.hud.createBossHealthBar("Bathroom ghost");
+    console.log("Boss fight started!");
+    this.hud.createBossHealthBar("Bathroom Ghost");
     this.bossHealthFill = this.hud.bossHealthFill;
+    if (this.bossHealthFill) this.bossHealthFill.style.width = "100%";
 
-    console.log("✅ Bathroom boss health bar created:", this.bossHealthFill);
-
-    // Ensure it starts at 100%
-    if (this.bossHealthFill) {
-      this.bossHealthFill.style.width = "100%";
-    }
-    // FORCE HUD TO 100%
-    if (this.boss?.hud?.updateBossHealth) {
-      this.boss.hud.updateBossHealth(100);
-    }
-
-    // Immediately shoot a projectile at the player to trigger the sequence
     setTimeout(() => {
       if (this.boss && this.boss.isAlive) {
         this.boss.shoot();
-        console.log("💥 Boss fired initial shot!");
+        console.log("Boss fired initial shot!");
       }
     }, 500);
   }
 
   toggleTorch() {
     if (!this.torchEnabled) {
-      // Turn on torch
       this.torchEnabled = true;
       this.torchLight.visible = true;
       this.showTorchPrompt = false;
       this.torchPromptElement.style.display = "none";
-
-      // Brighten the scene slightly when torch is on
       this.ambientLight.intensity = 0.3;
+      console.log("Torch enabled!");
 
-      console.log("🔦 Torch enabled!");
-
-      // Show instructions for shooting
-      setTimeout(() => {
-        this.showShootingInstructions();
-      }, 1000);
+      setTimeout(() => this.showShootingInstructions(), 1000);
     } else {
-      // Turn off torch
       this.torchEnabled = false;
       this.torchLight.visible = false;
       this.ambientLight.intensity = 0.1;
-      console.log("🔦 Torch disabled!");
+      console.log("Torch disabled!");
     }
   }
 
   showShootingInstructions() {
-    const instructionsElement = document.createElement("div");
-    instructionsElement.innerHTML = "Left click to shoot the boss!";
-    instructionsElement.style.cssText = `
-      position: fixed;
-      top: 70%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #ffff00;
-      font-size: 18px;
-      font-weight: bold;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-      z-index: 1000;
+    const el = document.createElement("div");
+    el.innerHTML = "Left click to shoot the boss!";
+    el.style.cssText = `
+      position: fixed; top: 70%; left: 50%; transform: translate(-50%, -50%);
+      color: #ffff00; font-size: 18px; font-weight: bold;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8); z-index: 1000;
     `;
-    document.body.appendChild(instructionsElement);
-
-    // Remove after 5 seconds
-    setTimeout(() => {
-      if (instructionsElement.parentNode) {
-        instructionsElement.parentNode.removeChild(instructionsElement);
-      }
-    }, 5000);
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 5000);
   }
 
   handleProjectileHit() {
-    // Player takes damage using the proper takeDamage method
     if (this.player && this.player.takeDamage) {
       this.player.takeDamage(1);
-      console.log(
-        `💔 Player took damage! Health: ${this.player.health.current}/${this.player.health.max}`
-      );
-
-      // Check if player died
       if (this.player.health.current <= 0) {
         this.handlePlayerDefeat();
         return;
       }
     }
 
-    // Visual feedback - flash screen red
-    const flashDiv = document.createElement("div");
-    flashDiv.style.position = "fixed";
-    flashDiv.style.top = "0";
-    flashDiv.style.left = "0";
-    flashDiv.style.width = "100%";
-    flashDiv.style.height = "100%";
-    flashDiv.style.background = "rgba(255, 0, 0, 0.3)";
-    flashDiv.style.pointerEvents = "none";
-    flashDiv.style.zIndex = "9999";
-    document.body.appendChild(flashDiv);
+    const flash = document.createElement("div");
+    flash.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,0,0,0.3);pointerEvents:none;z-index:9999;`;
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), 200);
 
-    setTimeout(() => {
-      if (flashDiv.parentElement) {
-        document.body.removeChild(flashDiv);
-      }
-    }, 200);
-
-    // Show torch prompt only once
     if (!this.hitByProjectile) {
       this.hitByProjectile = true;
       this.showTorchPrompt = true;
       this.torchPromptElement.style.display = "block";
-      console.log("💔 Player hit by projectile! Show torch prompt.");
     }
   }
 
-  // Handle E key press for torch and inventory
   handleInteraction() {
-    console.log("🔧 E key pressed in bathroom scene");
-
-    // First check torch interaction
     if (this.showTorchPrompt && !this.torchEnabled) {
-      console.log("🔦 Toggling torch");
       this.toggleTorch();
       return;
     }
 
-    // If no torch interaction, check inventory
-    console.log("📦 Checking inventory, inventory exists:", !!this.inventory);
-    if (this.inventory) {
-      const selectedItem = this.inventory.getSelectedItem();
-      console.log("📦 Selected item:", selectedItem);
-      if (selectedItem && selectedItem.onUse) {
-        console.log("🧻 Using selected item:", selectedItem.name);
-        selectedItem.onUse();
-      } else {
-        console.log("❌ No selected item or no onUse function");
-      }
+    const item = this.inventory.getSelectedItem();
+    if (item && item.onUse) {
+      item.onUse();
     }
   }
 
-  // Handle F key press for toilet paper pickup
   handlePickup() {
     if (this.toiletPaper && this.pickupPromptShown) {
       this.pickupToiletPaper();
     }
   }
 
+  // -----------------------------------------------------------------
+  // ENVIRONMENT
+  // -----------------------------------------------------------------
   async loadBathroomEnvironment() {
     const loader = new GLTFLoader();
-
     try {
       console.log("Loading bathroom model...");
       const gltf = await loader.loadAsync("/assets/models/smallbathroom.glb");
-
       this.bathroomModel = gltf.scene;
       this.bathroomModel.position.set(0, 4.5, 5);
       this.bathroomModel.scale.set(4, 4, 4);
       this.scene.add(this.bathroomModel);
 
-      console.log("✅ Bathroom model loaded. Adding collisions...");
-
       this.addCollisions(this.bathroomModel);
       this.setupMirror(this.bathroomModel);
 
-      // ADD THIS: Create dust particles and apply dirty filter
       this.dustParticles = createDustParticles(this.scene);
       this.applyDirtyBathroom();
-
-      // Spawn boss after bathroom is loaded
-      //this.spawnBoss();
     } catch (err) {
-      console.error("❌ Failed to load bathroom environment:", err);
+      console.error("Failed to load bathroom:", err);
     }
   }
 
   applyDirtyBathroom() {
-    console.log("🟤 Applying dirty bathroom effects...");
-
-    // Show dust particles
-    if (this.dustParticles) {
-      this.dustParticles.visible = true;
-    }
-
-    // Apply brownish tint to bathroom materials (but keep dark lighting)
+    if (this.dustParticles) this.dustParticles.visible = true;
     this.scene.traverse((obj) => {
-      // Skip player ghost, gun, and UI elements
       if (
         obj.userData.isPlayerGhost ||
         obj.userData.protectFromFilter ||
         obj === this.player?.ghost ||
         obj === this.player?.gun
-      ) {
+      )
         return;
-      }
 
       if (obj.isMesh && obj.material) {
-        // Store original material if not stored
         if (!obj.userData.originalMaterial) {
           obj.userData.originalMaterial = {
             color: obj.material.color.getHex(),
@@ -379,95 +410,64 @@ export default class BathroomScene {
             metalness: obj.material.metalness,
           };
         }
-
-        // Apply dirty brownish tint
-        obj.material.color.setHex(0x8a7a6a); // Brownish-gray color
-        obj.material.roughness = 0.9; // More rough/dirty
-        obj.material.metalness = 0.1; // Less metallic
+        obj.material.color.setHex(0x8a7a6a);
+        obj.material.roughness = 0.9;
+        obj.material.metalness = 0.1;
         obj.material.needsUpdate = true;
       }
     });
-
-    console.log("✅ Dirty bathroom effects applied");
   }
 
   applyCleanBathroom() {
-    console.log("✨ Applying clean bathroom effects...");
-
-    // Hide dust particles
-    if (this.dustParticles) {
-      this.dustParticles.visible = false;
-    }
-
-    // Restore clean white materials
+    if (this.dustParticles) this.dustParticles.visible = false;
     this.scene.traverse((obj) => {
-      // Skip player ghost, gun, and UI elements
       if (
         obj.userData.isPlayerGhost ||
         obj.userData.protectFromFilter ||
         obj === this.player?.ghost ||
         obj === this.player?.gun
-      ) {
+      )
         return;
-      }
 
       if (obj.isMesh && obj.material && obj.userData.originalMaterial) {
-        // Restore to clean white/original colors
-        obj.material.color.setHex(0xffffff); // Clean white
-        obj.material.roughness = 0.3; // Shinier
-        obj.material.metalness = 0.3; // More metallic
+        obj.material.color.setHex(0xffffff);
+        obj.material.roughness = 0.3;
+        obj.material.metalness = 0.3;
         obj.material.needsUpdate = true;
       }
     });
-
-    console.log("✅ Clean bathroom effects applied");
   }
 
   addCollisions(root) {
-    let added = 0;
-    let skipped = 0;
-    const tempBox = new THREE.Box3();
-    const size = new THREE.Vector3();
-
+    let added = 0,
+      skipped = 0;
+    const box = new THREE.Box3(),
+      size = new THREE.Vector3();
     root.traverse((child) => {
-      if (child.isMesh) {
-        const name = (child.name || "").toLowerCase();
-
-        if (name.includes("sink")) {
-          this.physics.addCollisionObject(child, false);
-          added++;
-          return;
-        }
-
-        tempBox.setFromObject(child);
-        tempBox.getSize(size);
-
-        const minSize = 0.4;
-        if (size.x < minSize && size.y < minSize && size.z < minSize) {
-          skipped++;
-          return;
-        }
-
-        if (
-          name.includes("bottle") ||
-          name.includes("soap") ||
-          name.includes("toothbrush") ||
-          name.includes("cup") ||
-          name.includes("toothpaste") ||
-          name.includes("towel") ||
-          name.includes("brush")
-        ) {
-          skipped++;
-          return;
-        }
-
+      if (!child.isMesh) return;
+      const name = (child.name || "").toLowerCase();
+      if (name.includes("sink")) {
         this.physics.addCollisionObject(child, false);
         added++;
+        return;
       }
-    });
 
+      box.setFromObject(child);
+      box.getSize(size);
+      if (size.x < 0.4 && size.y < 0.4 && size.z < 0.4) {
+        skipped++;
+        return;
+      }
+      if (name.match(/bottle|soap|toothbrush|cup|toothpaste|towel|brush/)) {
+        skipped++;
+        return;
+      }
+
+      this.physics.addCollisionObject(child, false);
+      added++;
+    });
     console.log(
-      `✅ Added ${added} collision objects, skipped ${skipped} small props.`
+      `Added ${added} collision objects, skipped ${skipped} small props.`
     );
   }
 
@@ -725,33 +725,28 @@ export default class BathroomScene {
     });
   }
 
+  // -----------------------------------------------------------------
+  // UPDATE LOOP
+  // -----------------------------------------------------------------
   updateWithCameraRotation(yaw, pitch) {
-    const delta = this.clock.getDelta();
-    const safeDelta = Math.min(delta, 0.1);
+    const delta = Math.min(this.clock.getDelta(), 0.1);
     const time = this.clock.getElapsedTime();
 
-    if (this.gameOver) {
+    if (this.gameOver || this.isPaused) {
       this.renderer.render(this.scene, this.camera);
       return;
     }
 
-    if (this.player && this.player.update) {
-      this.player.update();
-    }
+    if (this.player?.update) this.player.update();
 
-    // ADD THIS: Update dust particles animation
-    if (this.dustParticles && this.dustParticles.visible) {
+    if (this.dustParticles?.visible)
       updateDustParticles(this.dustParticles, delta);
-    }
 
-    // ... rest of your existing update code (boss update, etc.)
-
-    if (!this.gameOver && this.boss && this.boss.isAlive) {
-      this.boss.update(safeDelta, time);
+    if (!this.gameOver && this.boss?.isAlive) {
+      this.boss.update(delta, time);
       this.checkProjectileCollisions();
       this.updateBossHealth();
     } else if (
-      !this.gameOver &&
       this.boss &&
       !this.boss.isAlive &&
       this.boss.defeated &&
@@ -761,23 +756,49 @@ export default class BathroomScene {
     }
 
     if (this.torchEnabled && this.torchLight) {
-      const direction = new THREE.Vector3(0, 0, -1);
-      direction.applyQuaternion(this.camera.quaternion);
+      const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(
+        this.camera.quaternion
+      );
       this.torchLight.target.position
         .copy(this.camera.position)
-        .add(direction.multiplyScalar(10));
+        .add(dir.multiplyScalar(10));
     }
 
     if (this.toiletPaper) {
-      this.toiletPaper.userData.floatOffset += safeDelta * 2;
+      this.toiletPaper.userData.floatOffset += delta * 2;
       this.toiletPaper.position.y =
         1.0 + Math.sin(this.toiletPaper.userData.floatOffset) * 0.2;
-      this.toiletPaper.rotation.y += safeDelta;
+      this.toiletPaper.rotation.y += delta;
       this.checkToiletPaperPickup();
     }
 
     this.updateMirror();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // -----------------------------------------------------------------
+  // BOSS DEFEAT → VICTORY CUTSCENE
+  // -----------------------------------------------------------------
+  handleBossDefeat() {
+    if (this.boss.defeatedHandled) return;
+    this.boss.defeatedHandled = true;
+
+    console.log("Bathroom Boss defeated!");
+    this.hud.removeBossHealthBar();
+    this.bossHealthFill = null;
+
+    // Trigger victory cutscene
+    this.bossDefeated();
+
+    // Drop toilet paper after delay
+    setTimeout(() => {
+      this.dropToiletPaper(this.boss.bossModel.position);
+      setTimeout(() => {
+        this.hud.showMessage(
+          "Mysterious toilet paper has appeared... Pick it up!"
+        );
+      }, 1000);
+    }, 3000);
   }
 
   checkProjectileCollisions() {
@@ -982,25 +1003,48 @@ export default class BathroomScene {
   }
 
   restartGame() {
-    console.log("Restarting bathroom boss fight...");
+    console.log("Restarting Bathroom Scene — cleaning old UI...");
 
-    // === 1. REMOVE GAME OVER UI ===
-    const overlay = document.getElementById("bathroom-game-over-overlay");
-    if (overlay) document.body.removeChild(overlay);
+    // === 1. REMOVE *ALL* GAME OVER / RESTART OVERLAYS ===
+    document
+      .querySelectorAll('[id*="game-over"], [id*="restart"], [id*="overlay"]')
+      .forEach((el) => {
+        if (el.parentNode) {
+          console.log("Removing old overlay:", el.id || el.className);
+          el.parentNode.removeChild(el);
+        }
+      });
 
-    // === 2. RESET GAME FLAGS ===
+    // Also remove any with class or text
+    document.querySelectorAll("div").forEach((el) => {
+      const text = el.textContent.toLowerCase();
+      if (
+        text.includes("game over") ||
+        text.includes("restart") ||
+        text.includes("main menu")
+      ) {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }
+    });
+
+    // === 2. RESET BATHROOM FLAGS ===
     this.gameOver = false;
     this.hitByProjectile = false;
     this.showTorchPrompt = false;
     this.torchEnabled = false;
     this.torchLight.visible = false;
-    this.torchPromptElement.style.display = "none";
+    if (this.torchPromptElement) {
+      this.torchPromptElement.style.display = "none";
+    }
     this.ambientLight.intensity = 0.1;
     this.pickupPromptShown = false;
+    this.victoryShown = false;
 
-    // === 3. CLEAN UP OLD BOSS & PROJECTILES ===
+    // === 3. CLEAN UP BOSS ===
     if (this.boss) {
-      if (this.boss.bossModel) this.scene.remove(this.boss.bossModel);
+      if (this.boss.bossModel && this.boss.bossModel.parent) {
+        this.scene.remove(this.boss.bossModel);
+      }
       this.boss.projectiles.forEach((p) => {
         if (p.parent) this.scene.remove(p);
       });
@@ -1013,58 +1057,47 @@ export default class BathroomScene {
     // === 4. RESET PLAYER ===
     this.player.health.current = this.player.health.max;
     this.player._isDead = false;
-    this.player.combatMode = false; // Will re-enable after gun load
+    this.player.combatMode = false;
 
-    // Reset player position
     if (this.player.ghost) {
       this.player.ghost.position.set(0, 2.5, 10);
       this.player.ghost.visible = false;
     }
 
-    // Update HUD hearts
-    if (this.player.hud) {
-      this.player.hud.updatePlayerHearts(
-        this.player.health.current,
-        this.player.health.max
-      );
-    }
+    this.player.hud.updatePlayerHearts(
+      this.player.health.current,
+      this.player.health.max
+    );
 
-    // === 5. RE-LOAD GUN & RE-ENTER COMBAT MODE ===
-    // We must reload the gun and re-enter combat to rebind shooting
-    this.player
-      .loadGun("/public/assets/models/gun.glb")
-      .then(() => {
-        if (this.player.gun) {
-          console.log("Gun re-loaded after restart");
-          this.player.enterCombat(); // ← CRITICAL: Re-enables shooting
-          console.log("Combat mode re-enabled");
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to reload gun on restart:", err);
-      });
-
-    // === 6. REMOVE TOILET PAPER IF EXISTS ===
+    // === 5. REMOVE TOILET PAPER ===
     if (this.toiletPaper) {
       this.scene.remove(this.toiletPaper);
       this.toiletPaper = null;
     }
     this.hidePickupPrompt();
 
-    // === 7. RE-SPAWN BOSS ===
-    // Delay slightly to ensure cleanup
-    setTimeout(() => {
-      this.spawnBoss();
-    }, 100);
-
-    // === 8. REMOVE ANY LEFTOVER HIT MARKERS / PROMPTS ===
+    // === 6. CLEAN UP UI ===
     document
       .querySelectorAll(".hit-marker, #pickup-prompt, .shooting-instructions")
       .forEach((el) => {
         if (el.parentNode) el.parentNode.removeChild(el);
       });
 
-    console.log("Bathroom scene fully restarted!");
+    // === 7. RELOAD GUN & SPAWN BOSS ===
+    this.player
+      .loadGun("/public/assets/models/gun.glb")
+      .then(() => {
+        if (this.player.gun) {
+          console.log("Gun re-loaded");
+          this.player.enterCombat();
+          this.spawnBoss();
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to reload gun:", err);
+      });
+
+    console.log("Bathroom Scene fully restarted — no old menus!");
   }
 
   goToMainMenu() {
@@ -1081,52 +1114,6 @@ export default class BathroomScene {
 
     // Reload the page to go back to main menu
     window.location.reload();
-  }
-
-  handleBossDefeat() {
-    if (this.boss.defeatedHandled) return;
-    this.boss.defeatedHandled = true;
-
-    console.log("🎉 Bathroom Boss defeated!");
-
-    // Clean up boss health bar
-    this.hud.removeBossHealthBar();
-    this.bossHealthFill = null;
-
-    // Show victory message
-    const victoryMessage = document.createElement("div");
-    victoryMessage.innerHTML =
-      "🎉 Victory! The Bathroom Ghost has been defeated!";
-    victoryMessage.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #00ff00;
-      font-size: 32px;
-      font-weight: bold;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-      z-index: 10000;
-      text-align: center;
-    `;
-    document.body.appendChild(victoryMessage);
-
-    // Wait a short delay before dropping toilet paper
-    setTimeout(() => {
-      if (victoryMessage.parentElement) {
-        document.body.removeChild(victoryMessage);
-      }
-
-      // Drop the toilet paper at boss location
-      this.dropToiletPaper(this.boss.bossModel.position);
-
-      // Show pickup message
-      setTimeout(() => {
-        this.hud.showMessage(
-          "Mysterious toilet paper has appeared... Pick it up!"
-        );
-      }, 1000);
-    }, 3000);
   }
 
   async dropToiletPaper(position) {

@@ -7,9 +7,9 @@ import PhysicsSystem from "../systems/physics.js";
 import Inventory from "../systems/inventory.js";
 import KitchenGhost from "../entities/kitchenGhost.js";
 import { level3start } from "../cutscenes/level3start.js";
-import { level3PreBattle } from "../cutscenes/level3PreBattle.js";
+import { level3preBattle} from "../cutscenes/level3PreBattle.js";
 import { level3postBattle } from "../cutscenes/level3postBattle.js";
-import CutsceneManager from "../ui/cutsceneManager.js";
+import CutsceneManager from "../systems/cutsceneManager.js";
 
 export default class KitchenScene {
 // Replace the constructor in kitchenScene.js with this:
@@ -75,28 +75,33 @@ constructor(renderer, camera, player, playerPosition, cameraRotation) {
   this.smokeParticles = [];
   this.steamParticles = [];
 
-  // ————————————————————————————————————————————————————————————————
-  // CUTSCENE MANAGER
-  // ————————————————————————————————————————————————————————————————
   this.cutscene = new CutsceneManager("cutscene-container");
 
   this.setupLighting();
 
-  // ————————————————————————————————————————————————————————————————
-  // 1. INTRO CUTSCENE — runs while models load
-  // ————————————————————————————————————————————————————————————————
-  this.cutscene.play(level3start).then(() => {
-    this.loadKitchenEnvironment().then(() => {
-      this.createInteractiveObjects();
+  // ✅ FIX: Setup mouse interaction BEFORE cutscene
+  this.setupMouseInteraction();
+  this.createCrosshair();
+
+  // ✅ FIX: Load environment first, THEN play cutscene
+  this.loadKitchenEnvironment().then(() => {
+    this.createInteractiveObjects();
+    
+    // Play cutscene AFTER everything is loaded
+    this.cutscene.play(level3start).then(() => {
+      console.log("Cutscene finished, starting intro...");
+      // Request pointer lock after cutscene
+      setTimeout(() => {
+        if (!document.pointerLockElement) {
+          document.body.requestPointerLock();
+        }
+        // Start intro phase after pointer lock
+        setTimeout(() => this.startIntroPhase(), 500);
+      }, 300);
     });
   });
 
   this.createAmbientEffects();
-  this.setupMouseInteraction();
-  this.createCrosshair();
-
-  // Start intro phase only after cutscene ends
-  setTimeout(() => this.startIntroPhase(), 600);
 
   window.kitchenScene = this;
 }
@@ -133,22 +138,34 @@ createCrosshair() {
     this.crosshair.style.boxShadow = `0 0 ${size * 2}px ${color}`;
   }
 
-  setupMouseInteraction() {
-    this.mouseMoveHandler = (event) => {
-      this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    };
-    window.addEventListener('mousemove', this.mouseMoveHandler);
-
-    this.clickHandler = (event) => {
-      if (this.currentPhase === "investigation" && !this.clickCooldown) {
-        this.clickCooldown = true;
-        setTimeout(() => this.clickCooldown = false, 300);
-        this.handleObjectSelection();
-      }
-    };
-    window.addEventListener('click', this.clickHandler);
+// ✅ FIX: Updated setupMouseInteraction to ensure it persists
+setupMouseInteraction() {
+  // Remove any existing handlers first
+  if (this.mouseMoveHandler) {
+    window.removeEventListener('mousemove', this.mouseMoveHandler);
   }
+  if (this.clickHandler) {
+    window.removeEventListener('click', this.clickHandler);
+  }
+
+  this.mouseMoveHandler = (event) => {
+    this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  };
+  window.addEventListener('mousemove', this.mouseMoveHandler);
+
+  this.clickHandler = (event) => {
+    console.log("Click detected! Phase:", this.currentPhase, "Cooldown:", this.clickCooldown);
+    if (this.currentPhase === "investigation" && !this.clickCooldown) {
+      this.clickCooldown = true;
+      setTimeout(() => this.clickCooldown = false, 300);
+      this.handleObjectSelection();
+    }
+  };
+  window.addEventListener('click', this.clickHandler);
+  
+  console.log("Mouse interaction handlers attached");
+}
 
 setupLighting() {
   // MUCH BRIGHTER ambient light for overall visibility
@@ -595,26 +612,30 @@ getFirstMaterial(obj) {
   // ————————————————————————————————————————————————————————————————
   // INTRO & INVESTIGATION
   // ————————————————————————————————————————————————————————————————
-  startIntroPhase() {
-    this.currentPhase = "intro";
-    this.showMessage("You've been hit! There's something wrong here...");
-    this.player.takeDamage(1);
-    this.flashScreen(0xff0000, 0.8);
-    this.blurScreen(true);
 
+// ✅ FIX: Updated startIntroPhase
+startIntroPhase() {
+  console.log("Starting intro phase...");
+  this.currentPhase = "intro";
+  this.showMessage("You've been hit! There's something wrong here...");
+  this.player.takeDamage(1);
+  this.flashScreen(0xff0000, 0.8);
+  this.blurScreen(true);
+
+  setTimeout(() => {
+    this.blurScreen(false);
+    this.showMessage("Not everything in this kitchen is what it seems.");
     setTimeout(() => {
-      this.blurScreen(false);
-      this.showMessage("Not everything in this kitchen is what it seems.");
+      this.showMessage("Find the possessed objects before it's too late!");
       setTimeout(() => {
-        this.showMessage("Find the possessed objects before it's too late!");
-        setTimeout(() => {
-          this.currentPhase = "investigation";
-          this.createObjectiveHUD();
-          this.showInvestigationInstructions();
-        }, 3000);
+        console.log("Switching to investigation phase...");
+        this.currentPhase = "investigation";
+        this.createObjectiveHUD();
+        this.showInvestigationInstructions();
       }, 3000);
-    }, 2000);
-  }
+    }, 3000);
+  }, 2000);
+}
 
   blurScreen(enable) {
     if (enable) {
@@ -628,63 +649,74 @@ getFirstMaterial(obj) {
     }
   }
 
-  showInvestigationInstructions() {
-    const instructions = document.createElement("div");
-    instructions.id = "investigation-instructions";
-    instructions.style.cssText = `
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.95); padding: 40px 60px;
-      border: 4px solid #ff6600; border-radius: 20px;
-      color: white; font-family: 'Arial Black', Arial, sans-serif;
-      text-align: center; z-index: 10000;
-      box-shadow: 0 0 30px rgba(255, 102, 0, 0.6);
-    `;
+// ✅ FIX: Updated showInvestigationInstructions
+showInvestigationInstructions() {
+  const instructions = document.createElement("div");
+  instructions.id = "investigation-instructions";
+  instructions.style.cssText = `
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.95); padding: 40px 60px;
+    border: 4px solid #ff6600; border-radius: 20px;
+    color: white; font-family: 'Arial Black', Arial, sans-serif;
+    text-align: center; z-index: 10000;
+    box-shadow: 0 0 30px rgba(255, 102, 0, 0.6);
+  `;
 
-    instructions.innerHTML = `
-      <h2 style="color: #ff6600; margin-bottom: 25px; font-size: 32px; text-shadow: 0 0 10px #ff6600;">
-        INVESTIGATION PHASE
-      </h2>
-      <div style="background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-        <p style="font-size: 18px; margin: 10px 0;">Aim at objects with your crosshair</p>
-        <p style="font-size: 18px; margin: 10px 0;">Possessed objects will glow with purple energy</p>
-        <p style="font-size: 20px; margin: 10px 0; font-weight: bold;">LEFT CLICK to select an object</p>
-      </div>
-      <div style="background: rgba(255, 0, 0, 0.2); padding: 15px; border-radius: 10px; border: 2px solid #ff0000;">
-        <p style="font-size: 16px; color: #ff6666; margin: 0;">
-          Wrong choices cost health! Choose wisely!
-        </p>
-        <p style="font-size: 14px; color: #ffaaaa; margin: 5px 0 0 0;">
-          You must find all 3 possessed objects to proceed
-        </p>
-      </div>
-      <button id="start-investigation" style="
-        margin-top: 25px; padding: 15px 40px; font-size: 20px;
-        background: linear-gradient(to bottom, #ff8800, #ff4400);
-        color: white; border: none; border-radius: 10px;
-        cursor: pointer; font-weight: bold;
-        box-shadow: 0 4px 15px rgba(255, 68, 0, 0.5);
-        transition: all 0.3s;
-      ">START INVESTIGATION</button>
-    `;
+  instructions.innerHTML = `
+    <h2 style="color: #ff6600; margin-bottom: 25px; font-size: 32px; text-shadow: 0 0 10px #ff6600;">
+      INVESTIGATION PHASE
+    </h2>
+    <div style="background: rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+      <p style="font-size: 18px; margin: 10px 0;">Aim at objects with your crosshair</p>
+      <p style="font-size: 18px; margin: 10px 0;">Possessed objects will glow with purple energy</p>
+      <p style="font-size: 20px; margin: 10px 0; font-weight: bold;">LEFT CLICK to select an object</p>
+    </div>
+    <div style="background: rgba(255, 0, 0, 0.2); padding: 15px; border-radius: 10px; border: 2px solid #ff0000;">
+      <p style="font-size: 16px; color: #ff6666; margin: 0;">
+        Wrong choices cost health! Choose wisely!
+      </p>
+      <p style="font-size: 14px; color: #ffaaaa; margin: 5px 0 0 0;">
+        You must find all 3 possessed objects to proceed
+      </p>
+    </div>
+    <button id="start-investigation" style="
+      margin-top: 25px; padding: 15px 40px; font-size: 20px;
+      background: linear-gradient(to bottom, #ff8800, #ff4400);
+      color: white; border: none; border-radius: 10px;
+      cursor: pointer; font-weight: bold;
+      box-shadow: 0 4px 15px rgba(255, 68, 0, 0.5);
+      transition: all 0.3s;
+    ">START INVESTIGATION</button>
+  `;
 
-    document.body.appendChild(instructions);
+  document.body.appendChild(instructions);
 
-    const btn = document.getElementById("start-investigation");
-    btn.onmouseover = () => {
-      btn.style.transform = "scale(1.1)";
-      btn.style.boxShadow = "0 6px 20px rgba(255, 68, 0, 0.8)";
-    };
-    btn.onmouseout = () => {
-      btn.style.transform = "scale(1)";
-      btn.style.boxShadow = "0 4px 15px rgba(255, 68, 0, 0.5)";
-    };
-    btn.onclick = () => {
-      instructions.remove();
+  const btn = document.getElementById("start-investigation");
+  btn.onmouseover = () => {
+    btn.style.transform = "scale(1.1)";
+    btn.style.boxShadow = "0 6px 20px rgba(255, 68, 0, 0.8)";
+  };
+  btn.onmouseout = () => {
+    btn.style.transform = "scale(1)";
+    btn.style.boxShadow = "0 4px 15px rgba(255, 68, 0, 0.5)";
+  };
+  btn.onclick = () => {
+    console.log("Investigation started!");
+    instructions.remove();
+    
+    // ✅ FIX: Force pointer lock and ensure handlers are active
+    setTimeout(() => {
       if (!document.pointerLockElement) {
         document.body.requestPointerLock();
       }
-    };
-  }
+      
+      // Re-attach handlers just in case
+      this.setupMouseInteraction();
+      
+      console.log("Ready for interaction!");
+    }, 100);
+  };
+}
 
   createObjectiveHUD() {
     this.objectiveHUD = document.createElement("div");
@@ -1104,7 +1136,7 @@ startBossPhase() {
   // ————————————————————————————————————————————————————————————————
   // 2. PRE-BATTLE CUTSCENE — runs while boss loads
   // ————————————————————————————————————————————————————————————————
-  this.cutscene.play(level3PreBattle).then(() => {
+  this.cutscene.play(level3preBattle).then(() => {
     this.showMessage("You sense an evil presence from the oven...");
     this.ovenLight.intensity = 3.0;
     this.ovenLight.color.setHex(0xff0000);
@@ -1336,6 +1368,176 @@ handleGameOver() {
   setTimeout(() => {
     this.showRestartMenu();
   }, 1500);
+}
+// NEW: Show professional restart menu
+showRestartMenu() {
+  console.log("📋 Showing restart menu...");
+  
+  // Create overlay
+  const overlay = document.createElement("div");
+  overlay.id = "restart-menu-overlay";
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(to bottom, rgba(20, 0, 0, 0.95), rgba(0, 0, 0, 0.98));
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    z-index: 10000; font-family: Arial, sans-serif;
+  `;
+
+  // Game Over Title
+  const title = document.createElement("h1");
+  title.textContent = "GAME OVER";
+  title.style.cssText = `
+    color: #ff0000; font-size: 72px; margin-bottom: 20px;
+    text-shadow: 4px 4px 8px black, 0 0 30px #ff0000;
+    animation: pulse 2s infinite;
+  `;
+  overlay.appendChild(title);
+
+  // Death message
+  const deathMsg = document.createElement("p");
+  deathMsg.textContent = this.getDeathMessage();
+  deathMsg.style.cssText = `
+    color: #ff6666; font-size: 24px; margin-bottom: 30px;
+    text-shadow: 2px 2px 4px black;
+  `;
+  overlay.appendChild(deathMsg);
+
+  // Stats container
+  const statsContainer = document.createElement("div");
+  statsContainer.style.cssText = `
+    background: rgba(0, 0, 0, 0.7); padding: 30px;
+    border-radius: 15px; margin-bottom: 30px;
+    border: 2px solid #ff6600;
+  `;
+
+  const stats = document.createElement("div");
+  stats.innerHTML = `
+    <p style="color: #ffaa00; font-size: 20px; margin: 10px 0;">
+      Possessed Objects Found: <span style="color: white;">${this.objectsDestroyed}/3</span>
+    </p>
+    <p style="color: #ffaa00; font-size: 20px; margin: 10px 0;">
+      Health Remaining: <span style="color: white;">${this.player.health.current}/${this.player.health.max} ❤️</span>
+    </p>
+  `;
+  statsContainer.appendChild(stats);
+  overlay.appendChild(statsContainer);
+
+  // Tip container
+  const tipContainer = document.createElement("div");
+  tipContainer.style.cssText = `
+    background: rgba(0, 100, 150, 0.3); padding: 20px;
+    border-radius: 10px; margin-bottom: 40px;
+    border: 2px solid #00aaff; max-width: 600px;
+  `;
+
+  const tip = document.createElement("p");
+  tip.innerHTML = `
+    <span style="color: #00ddff; font-size: 18px; font-weight: bold;">💡 TIP:</span><br>
+    <span style="color: white; font-size: 16px;">${this.getRandomTip()}</span>
+  `;
+  tipContainer.appendChild(tip);
+  overlay.appendChild(tipContainer);
+
+  // Button container
+  const buttonContainer = document.createElement("div");
+  buttonContainer.style.cssText = `display: flex; gap: 20px;`;
+
+  // Restart button
+  const restartBtn = document.createElement("button");
+  restartBtn.textContent = "RESTART KITCHEN";
+  restartBtn.style.cssText = `
+    padding: 20px 50px; font-size: 24px; font-weight: bold;
+    background: linear-gradient(to bottom, #ff8800, #ff4400);
+    color: white; border: 3px solid white; border-radius: 12px;
+    cursor: pointer; transition: all 0.3s;
+    box-shadow: 0 5px 20px rgba(255, 68, 0, 0.5);
+  `;
+
+  restartBtn.onmouseover = () => {
+    restartBtn.style.background = "linear-gradient(to bottom, #ffaa00, #ff6600)";
+    restartBtn.style.transform = "scale(1.1)";
+    restartBtn.style.boxShadow = "0 8px 30px rgba(255, 102, 0, 0.8)";
+  };
+
+  restartBtn.onmouseout = () => {
+    restartBtn.style.background = "linear-gradient(to bottom, #ff8800, #ff4400)";
+    restartBtn.style.transform = "scale(1)";
+    restartBtn.style.boxShadow = "0 5px 20px rgba(255, 68, 0, 0.5)";
+  };
+
+  restartBtn.onclick = () => {
+    console.log("🔄 Restart button clicked");
+    this.restartKitchen();
+  };
+
+  // Main Menu button
+  const mainMenuBtn = document.createElement("button");
+  mainMenuBtn.textContent = "MAIN MENU";
+  mainMenuBtn.style.cssText = `
+    padding: 20px 50px; font-size: 24px; font-weight: bold;
+    background: linear-gradient(to bottom, #555555, #333333);
+    color: white; border: 3px solid white; border-radius: 12px;
+    cursor: pointer; transition: all 0.3s;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+  `;
+
+  mainMenuBtn.onmouseover = () => {
+    mainMenuBtn.style.background = "linear-gradient(to bottom, #777777, #555555)";
+    mainMenuBtn.style.transform = "scale(1.1)";
+    mainMenuBtn.style.boxShadow = "0 8px 30px rgba(0, 0, 0, 0.8)";
+  };
+
+  mainMenuBtn.onmouseout = () => {
+    mainMenuBtn.style.background = "linear-gradient(to bottom, #555555, #333333)";
+    mainMenuBtn.style.transform = "scale(1)";
+    mainMenuBtn.style.boxShadow = "0 5px 20px rgba(0, 0, 0, 0.5)";
+  };
+
+  mainMenuBtn.onclick = () => {
+    console.log("🏠 Main menu button clicked");
+    window.location.reload();
+  };
+
+  buttonContainer.appendChild(restartBtn);
+  buttonContainer.appendChild(mainMenuBtn);
+  overlay.appendChild(buttonContainer);
+
+  // Add pulse animation
+  const style = document.createElement("style");
+  style.textContent = `
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.8; }
+    }
+  `;
+  document.head.appendChild(style);
+
+  document.body.appendChild(overlay);
+  console.log("✅ Restart menu displayed");
+}
+
+// Helper methods
+getDeathMessage() {
+  const messages = [
+    "The possessed objects were too strong!",
+    "You couldn't withstand the kitchen's curse!",
+    "The Kitchen Ghost's power overwhelmed you!",
+    "Your investigation came to a tragic end!",
+    "The haunted kitchen has claimed you!"
+  ];
+  return messages[Math.floor(Math.random() * messages.length)];
+}
+
+getRandomTip() {
+  const tips = [
+    "Hover over objects to see if they glow purple - those are possessed!",
+    "Each wrong choice costs you health. Choose carefully!",
+    "Missing 3 shots lets the object escape AND costs health!",
+    "Destroy all 3 possessed objects to face the Kitchen Ghost!",
+    "Keep your distance from the boss when it starts chasing you!",
+    "Watch for the object's glow when you aim at it!"
+  ];
+  return tips[Math.floor(Math.random() * tips.length)];
 }
 
 // NEW: Create death particle explosion

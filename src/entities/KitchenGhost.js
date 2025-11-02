@@ -1,60 +1,123 @@
-// src/entities/kitchenGhost.js - REFINED VERSION
+// src/entities/kitchenGhost.js - STANDALONE VERSION
 import * as THREE from "three";
-import BellboyBoss from "./bellboyBoss.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 /**
- * KitchenGhost - Refined boss for kitchen scene
- * - Shoots ONLY fireballs (no cleaning items)
+ * KitchenGhost - Standalone boss for kitchen scene
+ * - Shoots ONLY fireballs
  * - Spawns from oven with pop-out animation
  * - Teleports every 7 seconds
  * - 200 HP, chases at 50% health
  */
-export default class KitchenGhost extends BellboyBoss {
+export default class KitchenGhost {
   constructor(scene, player, hud, physics, spawnPosition, opts = {}) {
-    // Pass options to parent
-    super(scene, player, hud, physics, { ...opts, debug: opts.debug });
+    this.scene = scene;
+    this.player = player;
+    this.hud = hud;
+    this.physics = physics;
+    this.debug = opts.debug || false;
 
-    // CRITICAL: Prevent parent from loading/using cleaning item models
-    this.modelsLoaded = true;
-    this.projectileModels = [];
-    
-    // Don't let parent create health bar - kitchen scene handles it
-    this.skipHealthBarCreation = true;
+    // Health system
+    this.health = 200;
+    this.maxHealth = 200;
+    this.isAlive = true;
+    this.defeated = false;
+    this.defeatedHandled = false;
 
-    // Visual overrides
-    this.replaceModel();
+    // Projectile system
+    this.projectiles = [];
+    this.shootCooldown = 0;
+    this.shootInterval = 2.0; // Shoot every 2 seconds
+
+    // Chase mechanics
+    this.isChasing = false;
+    this.chaseSpeed = 0.06;
+    this.minDistance = 4;
+    this.chaseMessageShown = false;
 
     // Spawn configuration
-    this.ovenPos = spawnPosition || new THREE.Vector3(0, -2, -5);
-    this.mesh.position.copy(this.ovenPos);
+    this.ovenPos = spawnPosition || new THREE.Vector3(0, 0, -5);
     this.isSpawning = true;
     this.spawnTime = 0;
+    this.spawnDuration = 1.5;
 
     // Teleport settings
     this.teleportTimer = 0;
     this.teleportInterval = 7;
-    this.teleportRadius = 8;
-    this.teleportHeight = 2;
+    this.teleportRadius = 7;
+    this.teleportHeight = 0.5;
 
-    // Effects
-    this.deathExplosion = true;
+    // Visual elements
+    this.mesh = null;
+    this.spatulas = [];
+    this.gltfLoader = new GLTFLoader();
+    this.modelLoaded = false;
 
-    console.log("🔥 KitchenGhost initialized at", this.ovenPos);
+    console.log("🔥 KitchenGhost initializing at", this.ovenPos);
+
+    // Load model or create fallback
+    this.loadBossModel();
   }
 
   /**
-   * Replace bellboy model with chef ghost
+   * Load chef ghost model
    */
-  replaceModel() {
-    // Remove parent's model
-    if (this.mesh && this.mesh.parent) {
-      this.scene.remove(this.mesh);
-    }
-    if (this._debugBox && this._debugBox.parent) {
-      this.scene.remove(this._debugBox);
-    }
+  loadBossModel() {
+    const modelPath = "/assets/models/ghostbodychef.glb"; // Use a chef model if you have one
 
-    // Create ghost body
+    this.gltfLoader.load(
+      modelPath,
+      (gltf) => {
+        this.mesh = gltf.scene;
+        this.modelLoaded = true;
+
+        // Scale and position
+        this.mesh.scale.set(1.5, 1.5, 1.5);
+        this.mesh.position.copy(this.ovenPos);
+        this.mesh.rotation.y = 0;
+
+        // Setup for raycasting
+        this.mesh.userData.isBoss = true;
+        this.mesh.userData.isKitchenGhost = true;
+        this.mesh.traverse((child) => {
+          if (child.isMesh) {
+            child.userData.isBoss = true;
+            child.castShadow = true;
+            child.receiveShadow = true;
+            child.frustumCulled = false;
+            
+            if (child.geometry) {
+              try {
+                if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
+                if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+              } catch (e) {}
+            }
+          }
+        });
+
+        this.scene.add(this.mesh);
+        this.setupSpatulas();
+        console.log("✅ Kitchen Ghost model loaded!");
+      },
+      (xhr) => {
+        if (this.debug) {
+          console.log(`Kitchen Ghost: ${(xhr.loaded / xhr.total) * 100}% loaded`);
+        }
+      },
+      (error) => {
+        console.warn("Chef ghost model not found, using fallback:", error);
+        this.createFallbackBoss();
+      }
+    );
+  }
+
+  /**
+   * Create fallback chef ghost visual
+   */
+  createFallbackBoss() {
+    console.log("Creating fallback Kitchen Ghost...");
+
+    // Ghost body
     const bodyGeo = new THREE.CylinderGeometry(0.8, 1.2, 2.5, 16);
     const bodyMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
@@ -64,6 +127,7 @@ export default class KitchenGhost extends BellboyBoss {
       emissiveIntensity: 0.4,
     });
     this.mesh = new THREE.Mesh(bodyGeo, bodyMat);
+    this.mesh.position.copy(this.ovenPos);
 
     // Chef hat
     const hatGeo = new THREE.CylinderGeometry(0.4, 0.8, 1.2, 16);
@@ -78,6 +142,7 @@ export default class KitchenGhost extends BellboyBoss {
       emissive: 0xff0000,
       emissiveIntensity: 1.2,
     });
+    
     const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
     leftEye.position.set(-0.35, 0.5, 1.0);
     this.mesh.add(leftEye);
@@ -96,7 +161,34 @@ export default class KitchenGhost extends BellboyBoss {
     mouth.rotation.x = Math.PI / 2;
     this.mesh.add(mouth);
 
-    // Floating spatulas
+    // Setup for raycasting
+    this.mesh.userData.isBoss = true;
+    this.mesh.userData.isKitchenGhost = true;
+    this.mesh.traverse((child) => {
+      if (child.isMesh) {
+        child.userData.isBoss = true;
+        child.frustumCulled = false;
+        if (child.geometry) {
+          try {
+            if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
+            if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+          } catch (e) {}
+        }
+      }
+    });
+
+    this.scene.add(this.mesh);
+    this.setupSpatulas();
+    this.modelLoaded = true;
+    console.log("✅ Fallback Kitchen Ghost created!");
+  }
+
+  /**
+   * Create floating spatulas around boss
+   */
+  setupSpatulas() {
+    if (!this.mesh) return;
+
     const spatulaGeo = new THREE.BoxGeometry(0.15, 0.8, 0.05);
     const spatulaMat = new THREE.MeshStandardMaterial({
       color: 0x888888,
@@ -104,7 +196,6 @@ export default class KitchenGhost extends BellboyBoss {
       roughness: 0.3,
     });
     
-    this.spatulas = [];
     for (let i = 0; i < 3; i++) {
       const spatula = new THREE.Mesh(spatulaGeo, spatulaMat);
       const angle = (i / 3) * Math.PI * 2;
@@ -113,42 +204,15 @@ export default class KitchenGhost extends BellboyBoss {
       this.mesh.add(spatula);
       this.spatulas.push(spatula);
     }
-
-    // Setup for raycasting
-    this.mesh.traverse((child) => {
-      if (child.isMesh && child.geometry) {
-        try {
-          if (!child.geometry.boundingSphere) child.geometry.computeBoundingSphere();
-          if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
-        } catch (e) {
-          // Ignore geometry errors
-        }
-        child.frustumCulled = false;
-      }
-    });
-    
-    this.mesh.frustumCulled = false;
-    this.mesh.userData.isBoss = true;
-    this.mesh.userData.isKitchenGhost = true;
-
-    this.scene.add(this.mesh);
-    
-    if (this.debug) {
-      const box = new THREE.BoxHelper(this.mesh, 0xffff00);
-      this.scene.add(box);
-      this._debugBox = box;
-    }
-    
-    console.log("✅ Kitchen Ghost mesh created");
   }
 
   /**
-   * OVERRIDE: Shoot only fireballs
+   * Shoot fireballs at player
    */
   shoot() {
     if (!this.player?.ghost || !this.isAlive || !this.mesh) return;
 
-    // Get boss's WORLD position (critical for proper spawning)
+    // Get boss's WORLD position
     const bossWorldPos = new THREE.Vector3();
     this.mesh.getWorldPosition(bossWorldPos);
 
@@ -179,7 +243,7 @@ export default class KitchenGhost extends BellboyBoss {
       .normalize();
     
     projectile.position.copy(bossWorldPos);
-    projectile.position.y += 0.5; // Chest height offset
+    projectile.position.y += 0.5; // Chest height
     projectile.position.add(toPlayer.multiplyScalar(1.5)); // In front of boss
 
     // Calculate velocity toward player
@@ -202,7 +266,7 @@ export default class KitchenGhost extends BellboyBoss {
     projectile.userData.age = 0;
     projectile.userData.maxAge = 10;
 
-    // Add to scene and tracking array
+    // Add to scene and tracking
     this.projectiles.push(projectile);
     this.scene.add(projectile);
 
@@ -212,35 +276,176 @@ export default class KitchenGhost extends BellboyBoss {
   }
 
   /**
-   * Oven spawn animation
+   * Take damage from player
    */
-  updateSpawn(delta, time) {
-    if (!this.isSpawning) return;
+  takeDamage(amount) {
+    if (!this.isAlive) return;
     
-    this.spawnTime += delta;
-    const progress = Math.min(this.spawnTime / 1.2, 1); // 1.2 second spawn
-    
-    // Lerp position upward
-    this.mesh.position.y = THREE.MathUtils.lerp(
-      this.ovenPos.y,
-      this.ovenPos.y + 2,
-      progress
-    );
-    
-    // Scale up from small
-    this.mesh.scale.setScalar(THREE.MathUtils.lerp(0.1, 1, progress));
+    this.health = Math.max(0, this.health - amount);
+    console.log(`🔥 Kitchen Ghost took ${amount} damage! Health: ${this.health}/${this.maxHealth}`);
 
-    if (progress >= 1) {
-      this.isSpawning = false;
-      this.mesh.position.y = this.ovenPos.y + 2;
-      console.log("🔥 Kitchen Ghost spawn complete");
+    // Flash effect
+    if (this.mesh) {
+      this.mesh.traverse((child) => {
+        if (child.isMesh && child.material) {
+          const originalColor = child.material.color.clone();
+          child.material.color.setHex(0xff0000);
+          setTimeout(() => {
+            if (child.material) {
+              child.material.color.copy(originalColor);
+            }
+          }, 150);
+        }
+      });
+
+      // Shake
+      const originalPos = this.mesh.position.clone();
+      const shakeAmount = 0.15;
+      this.mesh.position.add(
+        new THREE.Vector3(
+          (Math.random() - 0.5) * shakeAmount,
+          (Math.random() - 0.5) * shakeAmount,
+          (Math.random() - 0.5) * shakeAmount
+        )
+      );
+      setTimeout(() => {
+        if (this.mesh) {
+          this.mesh.position.copy(originalPos);
+        }
+      }, 150);
+    }
+
+    // Start chasing at 50% health
+    if (this.health < this.maxHealth * 0.5 && !this.isChasing) {
+      this.isChasing = true;
+      console.log("⚠️ Kitchen Ghost is now chasing!");
+    }
+
+    if (this.health <= 0) {
+      this.die();
     }
   }
 
   /**
-   * Teleport to random safe position
+   * Death sequence
+   */
+  die() {
+    if (!this.isAlive) return;
+    
+    this.isAlive = false;
+    this.defeated = true;
+    console.log("🔥 Kitchen Ghost defeated!");
+
+    // Store position for explosion
+    const explosionPos = new THREE.Vector3();
+    if (this.mesh) {
+      this.mesh.getWorldPosition(explosionPos);
+    }
+
+    // Fade out
+    if (this.mesh) {
+      let opacity = 1;
+      const fadeOut = setInterval(() => {
+        opacity -= 0.03;
+        this.mesh.traverse((child) => {
+          if (child.isMesh && child.material) {
+            child.material.transparent = true;
+            child.material.opacity = Math.max(0, opacity);
+          }
+        });
+        
+        if (opacity <= 0) {
+          clearInterval(fadeOut);
+          this.scene.remove(this.mesh);
+          this.projectiles.forEach(p => {
+            try { this.scene.remove(p); } catch (e) {}
+          });
+          this.projectiles = [];
+        }
+      }, 40);
+    }
+
+    // Fire explosion
+    this.createFireExplosion(explosionPos);
+  }
+
+  /**
+   * Create fire particle explosion
+   */
+  createFireExplosion(position) {
+    for (let i = 0; i < 50; i++) {
+      const particleGeo = new THREE.SphereGeometry(0.2, 8, 8);
+      const particleMat = new THREE.MeshBasicMaterial({
+        color: i % 2 ? 0xff6600 : 0xffaa00,
+      });
+      
+      const particle = new THREE.Mesh(particleGeo, particleMat);
+      particle.position.copy(position);
+      
+      // Random velocity
+      const speed = 0.08 + Math.random() * 0.12;
+      const angle = (i / 50) * Math.PI * 2;
+      const elevation = (Math.random() - 0.5) * Math.PI * 0.5;
+      
+      particle.userData.velocity = new THREE.Vector3(
+        Math.cos(angle) * Math.cos(elevation) * speed,
+        Math.sin(elevation) * speed,
+        Math.sin(angle) * Math.cos(elevation) * speed
+      );
+      
+      this.scene.add(particle);
+
+      // Animate
+      const animate = () => {
+        if (!particle.parent) return;
+        
+        particle.position.add(particle.userData.velocity);
+        particle.userData.velocity.y -= 0.006; // Gravity
+        particle.scale.multiplyScalar(0.94); // Shrink
+        
+        if (particle.scale.x > 0.05) {
+          requestAnimationFrame(animate);
+        } else {
+          this.scene.remove(particle);
+        }
+      };
+      
+      animate();
+    }
+  }
+
+  /**
+   * Oven spawn animation
+   */
+  updateSpawn(delta) {
+    if (!this.isSpawning || !this.mesh) return;
+    
+    this.spawnTime += delta;
+    const progress = Math.min(this.spawnTime / this.spawnDuration, 1);
+    
+    // Lerp position upward
+    this.mesh.position.y = THREE.MathUtils.lerp(
+      this.ovenPos.y,
+      this.ovenPos.y + 0.5,
+      progress
+    );
+    
+    // Scale up
+    this.mesh.scale.setScalar(THREE.MathUtils.lerp(0.1, 1.5, progress));
+
+    if (progress >= 1) {
+      this.isSpawning = false;
+      this.mesh.position.y = this.ovenPos.y + 0.5;
+      console.log("🔥 Kitchen Ghost spawn complete!");
+    }
+  }
+
+  /**
+   * Teleport to random position
    */
   tryTeleport() {
+    if (!this.mesh) return;
+
     const maxAttempts = 20;
     
     for (let i = 0; i < maxAttempts; i++) {
@@ -263,16 +468,22 @@ export default class KitchenGhost extends BellboyBoss {
         this.mesh.position.copy(candidate);
         
         // Fade-in effect
-        const originalOpacity = this.mesh.material.opacity;
-        this.mesh.material.opacity = 0.3;
+        const originalOpacity = this.mesh.material?.opacity ?? 0.75;
+        if (this.mesh.material) {
+          this.mesh.material.opacity = 0.3;
+        }
         
         const fadeInterval = setInterval(() => {
-          this.mesh.material.opacity = Math.min(
-            this.mesh.material.opacity + 0.1,
-            originalOpacity
-          );
-          
-          if (this.mesh.material.opacity >= originalOpacity) {
+          if (this.mesh?.material) {
+            this.mesh.material.opacity = Math.min(
+              this.mesh.material.opacity + 0.1,
+              originalOpacity
+            );
+            
+            if (this.mesh.material.opacity >= originalOpacity) {
+              clearInterval(fadeInterval);
+            }
+          } else {
             clearInterval(fadeInterval);
           }
         }, 50);
@@ -286,68 +497,35 @@ export default class KitchenGhost extends BellboyBoss {
   }
 
   /**
-   * OVERRIDE: Death with fire explosion
+   * Update chase behavior
    */
-  die() {
-    if (!this.isAlive) return;
-    
-    // Store position before parent removes mesh
-    const explosionPos = new THREE.Vector3();
-    if (this.mesh) {
-      this.mesh.getWorldPosition(explosionPos);
-    }
+  updateChase(delta) {
+    if (!this.isChasing || !this.mesh || !this.player?.ghost) return;
 
-    // Call parent die() for fade-out and cleanup
-    super.die();
+    const playerPos = this.player.ghost.position.clone();
+    const bossPos = this.mesh.position.clone();
+    bossPos.y = 0;
+    playerPos.y = 0;
 
-    // Add fire explosion effect
-    if (this.deathExplosion) {
-      this.createFireExplosion(explosionPos);
-    }
-  }
+    const distance = bossPos.distanceTo(playerPos);
+    const direction = new THREE.Vector3()
+      .subVectors(playerPos, bossPos)
+      .normalize();
 
-  /**
-   * Create fire particle explosion
-   */
-  createFireExplosion(position) {
-    for (let i = 0; i < 40; i++) {
-      const particleGeo = new THREE.SphereGeometry(0.2, 8, 8);
-      const particleMat = new THREE.MeshBasicMaterial({
-        color: i % 2 ? 0xff6600 : 0xffaa00,
-      });
-      
-      const particle = new THREE.Mesh(particleGeo, particleMat);
-      particle.position.copy(position);
-      
-      // Random velocity in all directions
-      const speed = 0.08 + Math.random() * 0.12;
-      const angle = (i / 40) * Math.PI * 2;
-      const elevation = (Math.random() - 0.5) * Math.PI * 0.5;
-      
-      particle.userData.velocity = new THREE.Vector3(
-        Math.cos(angle) * Math.cos(elevation) * speed,
-        Math.sin(elevation) * speed,
-        Math.sin(angle) * Math.cos(elevation) * speed
+    if (distance > this.minDistance) {
+      const moveVector = direction.clone();
+      const currentPos = new THREE.Vector3(
+        this.mesh.position.x,
+        0,
+        this.mesh.position.z
       );
-      
-      this.scene.add(particle);
 
-      // Animate particle
-      const animate = () => {
-        if (!particle.parent) return;
-        
-        particle.position.add(particle.userData.velocity);
-        particle.userData.velocity.y -= 0.006; // Gravity
-        particle.scale.multiplyScalar(0.94); // Shrink
-        
-        if (particle.scale.x > 0.05) {
-          requestAnimationFrame(animate);
-        } else {
-          this.scene.remove(particle);
-        }
-      };
-      
-      animate();
+      const safeMovement = this.physics
+        ? this.physics.getSafeMovement(currentPos, moveVector, this.chaseSpeed)
+        : moveVector.multiplyScalar(this.chaseSpeed);
+
+      this.mesh.position.x += safeMovement.x;
+      this.mesh.position.z += safeMovement.z;
     }
   }
 
@@ -355,23 +533,27 @@ export default class KitchenGhost extends BellboyBoss {
    * Main update loop
    */
   update(delta, time) {
+    if (!this.mesh) return;
+
     // Handle spawn animation
     if (this.isSpawning) {
-      this.updateSpawn(delta, time);
+      this.updateSpawn(delta);
+      return; // Don't do anything else during spawn
     }
 
-    // Teleport logic
-    if (this.isAlive && !this.isSpawning) {
-      this.teleportTimer += delta;
-      
-      if (this.teleportTimer >= this.teleportInterval) {
-        this.teleportTimer = 0;
-        this.tryTeleport();
-      }
+    if (!this.isAlive) return;
+
+    // Hover animation
+    this.mesh.position.y = (this.ovenPos.y + 0.5) + Math.sin(time * 2) * 0.2;
+
+    // Face player
+    if (this.player?.ghost) {
+      const playerPos = this.player.ghost.position.clone();
+      this.mesh.lookAt(playerPos.x, this.mesh.position.y, playerPos.z);
     }
 
     // Animate spatulas
-    if (this.spatulas) {
+    if (this.spatulas.length > 0) {
       this.spatulas.forEach((spatula) => {
         spatula.userData.orbitAngle += delta * 2.5;
         const angle = spatula.userData.orbitAngle;
@@ -381,22 +563,58 @@ export default class KitchenGhost extends BellboyBoss {
       });
     }
 
-    // Animate fireballs
-    this.projectiles.forEach((projectile) => {
-      if (projectile.userData.rotationSpeed) {
-        projectile.rotation.x += projectile.userData.rotationSpeed.x;
-        projectile.rotation.y += projectile.userData.rotationSpeed.y;
-        projectile.rotation.z += projectile.userData.rotationSpeed.z;
-      }
-      
-      // Pulse inner flame
-      if (projectile.children.length > 0) {
-        const scale = 1 + Math.sin(time * 10) * 0.2;
-        projectile.children[0].scale.setScalar(scale);
-      }
-    });
+    // Teleport logic
+    this.teleportTimer += delta;
+    if (this.teleportTimer >= this.teleportInterval) {
+      this.teleportTimer = 0;
+      this.tryTeleport();
+    }
 
-    // Call parent update for movement, shooting, projectile cleanup
-    super.update(delta, time);
+    // Chase logic
+    this.updateChase(delta);
+
+    // Shooting
+    this.shootCooldown -= delta;
+    if (this.shootCooldown <= 0) {
+      this.shoot();
+      this.shootCooldown = this.shootInterval;
+    }
+
+    // Update projectiles
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const proj = this.projectiles[i];
+
+      // Move
+      if (proj.userData.velocity) {
+        proj.position.add(proj.userData.velocity);
+      }
+
+      // Rotate
+      if (proj.userData.rotationSpeed) {
+        proj.rotation.x += proj.userData.rotationSpeed.x;
+        proj.rotation.y += proj.userData.rotationSpeed.y;
+        proj.rotation.z += proj.userData.rotationSpeed.z;
+      }
+
+      // Pulse inner flame
+      if (proj.children.length > 0) {
+        const scale = 1 + Math.sin(time * 10) * 0.2;
+        proj.children[0].scale.setScalar(scale);
+      }
+
+      // Age management
+      proj.userData.age = (proj.userData.age || 0) + delta;
+      if (proj.userData.age > proj.userData.maxAge) {
+        try { this.scene.remove(proj); } catch (e) {}
+        this.projectiles.splice(i, 1);
+        continue;
+      }
+
+      // Remove if too far
+      if (proj.position.distanceTo(this.mesh.position) > 100) {
+        try { this.scene.remove(proj); } catch (e) {}
+        this.projectiles.splice(i, 1);
+      }
+    }
   }
 }
