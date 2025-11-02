@@ -107,38 +107,95 @@ export default class TitleMenu {
   }
 
   showCredits() {
+    // Create credits overlay
     const creditsOverlay = document.createElement("div");
-    creditsOverlay.style.cssText = `
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.95);
-      display: flex; flex-direction: column;
-      justify-content: center; align-items: center;
-      z-index: 3000; color: white; font-family: Arial, sans-serif;
-      text-align: center;
+    Object.assign(creditsOverlay.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "100%",
+      height: "100%",
+      backgroundColor: "black",
+      color: "white",
+      overflow: "hidden",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "flex-end",
+      zIndex: "3000",
+      fontFamily: "monospace",
+    });
+
+    const creditsText = document.createElement("div");
+    creditsText.innerHTML = `
+      <h2 style="text-align:center;">Game Credits</h2>
+      <p>Developed by: Team Muscle Mommies</p>
+      <p>Lead Programmer: Aimee Harding</p>
+      <p>Assistant Programmer: Tinotenda Gozho</p>
+      <p>Art & Design: Laaiqah Bayat</p>
+      <p>Sound & Music: McAtaaji Andongndou</p>
+      <p>Character Assets: Yurisha Govender</p>
+      <p>Story & Writing: Laaiqah Bayat</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>This is just placeholder text</p>
+      <p>Special Thanks To: You, the Player ❤️</p>
+      <br><br>
+      <p>Thank you for playing!</p>
     `;
 
-    creditsOverlay.innerHTML = `
-      <h1 style="font-size: 48px; margin-bottom: 30px; color: #ca4c4f;">👻 Credits 👻</h1>
-      <p style="font-size: 24px; margin: 10px 0;">Game by <strong>Team Cozy Ghost</strong></p>
-      <p style="font-size: 18px; margin: 10px 0; color: #aaaaaa;">Built with Three.js</p>
-      <p style="font-size: 18px; margin: 10px 0; color: #aaaaaa;">Thanks for playing!</p>
-      <button id="close-credits" style="
-        margin-top: 40px; padding: 15px 40px; font-size: 20px;
-        background: #ca4c4f; color: white; border: none; border-radius: 10px;
-        cursor: pointer; font-weight: bold;
-      ">Close</button>
-    `;
+    Object.assign(creditsText.style, {
+      textAlign: "center",
+      whiteSpace: "pre-line",
+      animation: "scroll-up 40s linear forwards",
+    });
 
+    creditsOverlay.appendChild(creditsText);
     document.body.appendChild(creditsOverlay);
 
-    document.getElementById("close-credits").onclick = () => {
-      creditsOverlay.remove();
-    };
+    // Add keyframe animation dynamically
+    const styleSheet = document.createElement("style");
+    styleSheet.textContent = `
+      @keyframes scroll-up {
+        from { transform: translateY(100%); }
+        to { transform: translateY(-120%); }
+      }
+    `;
+    document.head.appendChild(styleSheet);
+
+    // Allow exit on click
+    creditsOverlay.addEventListener("click", () => {
+      document.body.removeChild(creditsOverlay);
+      document.head.removeChild(styleSheet);
+    });
+
+    // Prevent clicks on the menu from affecting underlying layers
+    creditsOverlay.addEventListener("mousedown", (e) => e.stopPropagation());
+    creditsOverlay.addEventListener("mouseup", (e) => e.stopPropagation());
+    creditsOverlay.addEventListener("click", (e) => {
+      e.stopPropagation();
+      document.body.removeChild(creditsOverlay);
+      document.head.removeChild(styleSheet);
+    });
+
   }
+
 
   quitGame() {
     if (confirm("Are you sure you want to quit?")) {
       window.location.reload();
     }
   }
-}
+} 

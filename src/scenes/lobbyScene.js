@@ -17,6 +17,9 @@ import {
   updateDustParticles,
 } from "../core/filters.js"; // Update this path
 
+import { level2start } from "../cutscenes/level2start.js";
+
+
 export default class LobbyScene {
   constructor(renderer, camera) {
     this.renderer = renderer;

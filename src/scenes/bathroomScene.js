@@ -6,6 +6,11 @@ import BathroomBoss from "../entities/bathroomBoss.js";
 import Inventory from "../systems/inventory.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { createDustParticles, updateDustParticles } from "../core/filters.js";
+import { level2start } from "../cutscenes/level2start.js";
+import { level2preBattle } from "../cutscenes/level2preBattle.js";
+import { level2postBattle } from "../cutscenes/level2postBattle.js";
+import CutsceneManager from "../systems/cutsceneManager.js";
+
 
 export default class BathroomScene {
   constructor(renderer, camera) {

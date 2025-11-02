@@ -175,10 +175,12 @@ async function init() {
     if (e.key === "e" || e.key === "E") {
       if (currentScene.handleInteraction) {
         currentScene.handleInteraction();
+        
       } else if (currentScene.inventory) {
         const item = currentScene.inventory.getSelectedItem();
         item?.onUse?.();
       }
+      
     }
   });
 
