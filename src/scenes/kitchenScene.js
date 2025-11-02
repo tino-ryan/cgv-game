@@ -7,9 +7,9 @@ import PhysicsSystem from "../systems/physics.js";
 import Inventory from "../systems/inventory.js";
 import KitchenGhost from "../entities/kitchenGhost.js";
 import { level3start } from "../cutscenes/level3start.js";
-import { level3PreBattle } from "../cutscenes/level3PreBattle.js";
+import { level3preBattle } from "../cutscenes/level3preBattle.js";
 import { level3postBattle } from "../cutscenes/level3postBattle.js";
-import CutsceneManager from "../ui/cutsceneManager.js";
+import CutsceneManager from "../systems/cutsceneManager.js";
 
 export default class KitchenScene {
 // Replace the constructor in kitchenScene.js with this:
@@ -1104,7 +1104,7 @@ startBossPhase() {
   // ————————————————————————————————————————————————————————————————
   // 2. PRE-BATTLE CUTSCENE — runs while boss loads
   // ————————————————————————————————————————————————————————————————
-  this.cutscene.play(level3PreBattle).then(() => {
+  this.cutscene.play(level3preBattle).then(() => {
     this.showMessage("You sense an evil presence from the oven...");
     this.ovenLight.intensity = 3.0;
     this.ovenLight.color.setHex(0xff0000);
