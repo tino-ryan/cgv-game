@@ -84,50 +84,61 @@ export default class HUD {
     return fill;
   }
 
-  // Boss Health Bar (specific implementation)
-  createBossHealthBar() {
-    this.bossHealthBar = document.createElement("div");
-    this.bossHealthBar.style.position = "absolute";
-    this.bossHealthBar.style.top = "30px";
-    this.bossHealthBar.style.left = "50%";
-    this.bossHealthBar.style.transform = "translateX(-50%)";
-    this.bossHealthBar.style.width = "300px";
-    this.bossHealthBar.style.height = "24px";
-    this.bossHealthBar.style.border = "2px solid white";
-    this.bossHealthBar.style.background = "rgba(0,0,0,0.5)";
-    this.bossHealthBar.style.textAlign = "center";
-    this.bossHealthBar.style.position = "relative";
+createBossHealthBar() {
+  // Remove any existing boss health bar first
+  this.removeBossHealthBar();
 
-    this.bossHealthFill = document.createElement("div");
-    this.bossHealthFill.style.height = "100%";
-    this.bossHealthFill.style.width = "100%";
-    this.bossHealthFill.style.background = "red";
-    this.bossHealthFill.style.transition = "width 0.3s";
-    this.bossHealthBar.appendChild(this.bossHealthFill);
+  this.bossHealthBar = document.createElement("div");
+  this.bossHealthBar.style.position = "fixed"; // Changed from absolute to fixed
+  this.bossHealthBar.style.top = "30px";
+  this.bossHealthBar.style.left = "50%";
+  this.bossHealthBar.style.transform = "translateX(-50%)";
+  this.bossHealthBar.style.width = "400px"; // Made it wider for better visibility
+  this.bossHealthBar.style.height = "30px"; // Made it taller
+  this.bossHealthBar.style.border = "3px solid #ff0000"; // Thicker red border
+  this.bossHealthBar.style.background = "rgba(0,0,0,0.8)"; // Darker background
+  this.bossHealthBar.style.borderRadius = "8px";
+  this.bossHealthBar.style.zIndex = "9999"; // Ensure it's on top
 
-    // Boss label
-    const label = document.createElement("span");
-    label.innerText = "Bellboy Ghost";
-    label.style.position = "absolute";
-    label.style.left = "0";
-    label.style.top = "0";
-    label.style.width = "100%";
-    label.style.height = "100%";
-    label.style.textAlign = "center";
-    label.style.lineHeight = "24px";
-    label.style.color = "white";
-    label.style.fontWeight = "bold";
-    label.style.textShadow = "1px 1px 2px black";
-    this.bossHealthBar.appendChild(label);
+  this.bossHealthFill = document.createElement("div");
+  this.bossHealthFill.style.height = "100%";
+  this.bossHealthFill.style.width = "100%";
+  this.bossHealthFill.style.background = "linear-gradient(90deg, #ff0000, #cc0000)";
+  this.bossHealthFill.style.transition = "width 0.3s ease-out";
+  this.bossHealthFill.style.borderRadius = "5px";
+  this.bossHealthBar.appendChild(this.bossHealthFill);
 
-    document.body.appendChild(this.bossHealthBar);
+  // Boss label
+  const label = document.createElement("span");
+  label.innerText = "Bellboy Ghost";
+  label.style.position = "absolute";
+  label.style.left = "0";
+  label.style.top = "0";
+  label.style.width = "100%";
+  label.style.height = "100%";
+  label.style.display = "flex";
+  label.style.alignItems = "center";
+  label.style.justifyContent = "center";
+  label.style.color = "white";
+  label.style.fontWeight = "bold";
+  label.style.fontSize = "16px";
+  label.style.textShadow = "2px 2px 4px black";
+  label.style.pointerEvents = "none"; // Make sure it doesn't block anything
+  this.bossHealthBar.appendChild(label);
+
+  document.body.appendChild(this.bossHealthBar);
+  console.log("✅ Boss health bar created and added to DOM!");
+}
+
+updateBossHealth(percent) {
+  if (this.bossHealthFill) {
+    const clampedPercent = Math.max(0, Math.min(100, percent));
+    this.bossHealthFill.style.width = clampedPercent + "%";
+    console.log(`Boss health updated to ${clampedPercent}%`);
+  } else {
+    console.warn("Boss health fill not found!");
   }
-
-  updateBossHealth(percent) {
-    if (this.bossHealthFill) {
-      this.bossHealthFill.style.width = percent + "%";
-    }
-  }
+}
 
   removeBossHealthBar() {
     if (this.bossHealthBar && this.bossHealthBar.parentElement) {

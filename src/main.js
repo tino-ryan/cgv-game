@@ -1,4 +1,4 @@
-// src/main.js - UPDATED WITH BETTER KITCHEN INTEGRATION & SMOOTH CONTROLS
+// src/main.js - CLEAN VERSION WITH PROPER GAME FLOW
 import * as THREE from "three";
 import { initRenderer } from "./core/renderer.js";
 import LobbyScene from "./scenes/lobbyScene.js";
@@ -7,127 +7,21 @@ import BathroomScene from './scenes/bathroomScene.js';
 import KitchenScene from './scenes/kitchenScene.js';
 import CutsceneManager from "./systems/cutsceneManager.js";
 import { tutorialCutscene } from "./cutscenes/tutorialCutscene.js";
+import SceneManager from "./systems/sceneManager.js";
+import TitleMenu from "./scenes/titleMenu.js";
+import PauseMenu from "./ui/pauseMenu.js";
 
-let renderer, camera, currentScene, lobbyScene, hallwayScene, bathroomScene, kitchenScene;
+let renderer, camera, currentScene, sceneManager, lobbyScene, hallwayScene, bathroomScene, kitchenScene;
 
-const mouseSensitivity = 0.0015; // Slightly reduced for smoother aiming
+const mouseSensitivity = 0.0015;
+let isPaused = false;
+let pauseMenu;
 
 let yaw = 0;
 let pitch = 0;
 
 const yawObject = new THREE.Object3D();
 const pitchObject = new THREE.Object3D();
-
-// 🆕 SCENE SELECTION MENU
-function createSceneSelectionMenu() {
-  const overlay = document.createElement("div");
-  overlay.id = "scene-select-overlay";
-  overlay.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column;
-    justify-content: center; align-items: center; z-index: 10001;
-    font-family: Arial, sans-serif;
-  `;
-
-  const title = document.createElement("h1");
-  title.textContent = "🎮 SCENE SELECTOR";
-  title.style.cssText = "color: #00ff00; font-size: 48px; margin-bottom: 40px;";
-  overlay.appendChild(title);
-
-  const subtitle = document.createElement("p");
-  subtitle.textContent = "Choose a scene to test:";
-  subtitle.style.cssText = "color: white; font-size: 20px; margin-bottom: 30px;";
-  overlay.appendChild(subtitle);
-
-  const scenes = [
-    { name: "Lobby (Tutorial + Boss)", key: "lobby" },
-    { name: "Hallway (Puzzle)", key: "hallway" },
-    { name: "Bathroom (Boss Fight)", key: "bathroom" },
-    { name: "Kitchen (NEW - Possessed Objects)", key: "kitchen" }
-  ];
-
-  scenes.forEach(scene => {
-    const btn = document.createElement("button");
-    btn.textContent = scene.name;
-    btn.style.cssText = `
-      padding: 15px 40px; font-size: 20px; font-weight: bold; margin: 10px;
-      color: white; background: #3366cc; border: 3px solid white;
-      border-radius: 10px; cursor: pointer; transition: all 0.3s;
-    `;
-    btn.onmouseover = () => btn.style.background = "#5588ee";
-    btn.onmouseout = () => btn.style.background = "#3366cc";
-    btn.onclick = () => {
-      document.body.removeChild(overlay);
-      startScene(scene.key);
-    };
-    overlay.appendChild(btn);
-  });
-
-  const skipBtn = document.createElement("button");
-  skipBtn.textContent = "Skip Menu (Normal Start)";
-  skipBtn.style.cssText = `
-    padding: 10px 30px; font-size: 16px; margin-top: 30px;
-    color: #888; background: transparent; border: 2px solid #666;
-    border-radius: 5px; cursor: pointer;
-  `;
-  skipBtn.onclick = () => {
-    document.body.removeChild(overlay);
-    startScene("lobby");
-  };
-  overlay.appendChild(skipBtn);
-
-  document.body.appendChild(overlay);
-}
-
-async function startScene(sceneKey) {
-  console.log(`🎬 Starting scene: ${sceneKey}`);
-
-  // Play cutscene only for lobby
-  if (sceneKey === "lobby") {
-    const cutsceneContainer = document.createElement("div");
-    cutsceneContainer.id = "cutscene-container";
-    document.body.appendChild(cutsceneContainer);
-    Object.assign(cutsceneContainer.style, {
-      position: "absolute", top: "0", left: "0", width: "100%", height: "100%",
-      backgroundColor: "black", display: "none", flexDirection: "column",
-      alignItems: "center", justifyContent: "center", zIndex: "1000",
-      color: "white", textAlign: "center",
-    });
-    const cutsceneManager = new CutsceneManager("cutscene-container");
-    await cutsceneManager.play(tutorialCutscene);
-  }
-
-  switch (sceneKey) {
-    case "lobby":
-      lobbyScene = new LobbyScene(renderer, camera);
-      lobbyScene.scene.add(yawObject);
-      currentScene = lobbyScene;
-      break;
-
-    case "hallway":
-      hallwayScene = new HallwayScene(renderer, camera, null, new THREE.Vector3(0, 1.6, 5), { yaw: 0, pitch: 0 });
-      hallwayScene.scene.add(yawObject);
-      yawObject.position.set(0, 1.6, 5);
-      currentScene = hallwayScene;
-      break;
-
-    case "bathroom":
-      bathroomScene = new BathroomScene(renderer, camera, null, new THREE.Vector3(0, 1.6, 5), { yaw: 0, pitch: 0 });
-      bathroomScene.scene.add(yawObject);
-      yawObject.position.set(0, 1.6, 5);
-      currentScene = bathroomScene;
-      break;
-
-    case "kitchen":
-      kitchenScene = new KitchenScene(renderer, camera, null, new THREE.Vector3(0, 1.6, 5), { yaw: 0, pitch: 0 });
-      kitchenScene.scene.add(yawObject);
-      yawObject.position.set(0, 1.6, 5);
-      currentScene = kitchenScene;
-      break;
-  }
-
-  console.log(`✅ Scene loaded: ${sceneKey}`);
-}
 
 async function init() {
   renderer = initRenderer();
@@ -139,14 +33,20 @@ async function init() {
   );
   camera.position.set(0, 2, 5);
 
+  sceneManager = new SceneManager(renderer, camera);
+
+  const titleMenu = new TitleMenu(sceneManager);
+  sceneManager.setScene(null);
+
+  // Set up camera hierarchy for rotation
   yawObject.add(pitchObject);
   pitchObject.add(camera);
 
   console.log("Renderer initialized:", renderer);
   console.log("Camera initialized:", camera);
 
-  // 🆕 SHOW SCENE SELECTION MENU
-  createSceneSelectionMenu();
+  // Start with lobby scene after cutscene
+  await startLobbyScene();
 
   // Setup pointer lock
   document.body.addEventListener("dblclick", () => {
@@ -156,7 +56,6 @@ async function init() {
     }
   });
 
-  // Also request on single click if not locked
   document.body.addEventListener("click", () => {
     if (document.pointerLockElement !== document.body) {
       document.body.requestPointerLock();
@@ -229,6 +128,12 @@ async function init() {
 
   function animate() {
     requestAnimationFrame(animate);
+    if (isPaused) return;
+
+    if (sceneManager.currentScene) {
+      sceneManager.update();
+      renderer.render(sceneManager.currentScene.scene, camera);
+    }
 
     if (!currentScene || !currentScene.player || !currentScene.player.ghost) {
       if (currentScene) currentScene.update();
@@ -302,8 +207,22 @@ async function init() {
       }
     }
 
-    currentScene.updateWithCameraRotation(yaw, pitch);
+    // Update current scene with camera rotation
+    if (currentScene instanceof KitchenScene) {
+      yawObject.position.copy(currentScene.player.ghost.position);
+      yawObject.position.y += 0.8; // Camera at eye level for smaller player
+      currentScene.updateWithCameraRotation(yaw, pitch);
+    } else if (currentScene instanceof LobbyScene) {
+      yawObject.position.copy(currentScene.player.ghost.position);
+      currentScene.updateWithCameraRotation(yaw, pitch);
+    } else if (currentScene instanceof BathroomScene) {
+      currentScene.updateWithCameraRotation(yaw, pitch);
+    }
   }
+
+  pauseMenu = new PauseMenu(sceneManager, lobbyScene, (paused) => {
+    isPaused = paused;
+  });
   
   animate();
 
@@ -312,20 +231,139 @@ async function init() {
   window.exitCombat = () => currentScene.player.exitCombat();
   window.startBoss = () => currentScene.startBossFight?.();
   window.toggleCollisionDebug = () => {
-    currentScene.physics.debugEnabled = !currentScene.physics.debugEnabled;
-    console.log("Collision debug:", currentScene.physics.debugEnabled ? "ON" : "OFF");
+    if (currentScene && currentScene.physics) {
+      currentScene.physics.debugEnabled = !currentScene.physics.debugEnabled;
+      console.log("Collision debug:", currentScene.physics.debugEnabled ? "ON" : "OFF");
+    }
   };
 }
 
-init().catch((error) => console.error("Init failed:", error));
+// ============================================================================
+// LOBBY SCENE (Starting point with tutorial + boss)
+// ============================================================================
+async function startLobbyScene() {
+  console.log("🏨 Starting Lobby Scene...");
+  
+  // Play intro cutscene
+  const cutsceneContainer = document.createElement("div");
+  cutsceneContainer.id = "cutscene-container";
+  document.body.appendChild(cutsceneContainer);
+  Object.assign(cutsceneContainer.style, {
+    position: "absolute", top: "0", left: "0", width: "100%", height: "100%",
+    backgroundColor: "black", display: "none", flexDirection: "column",
+    alignItems: "center", justifyContent: "center", zIndex: "1000",
+    color: "white", textAlign: "center",
+  });
+  
+  const cutsceneManager = new CutsceneManager("cutscene-container");
+  await cutsceneManager.play(tutorialCutscene);
 
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+  // Initialize lobby
+  lobbyScene = new LobbyScene(renderer, camera);
+  lobbyScene.scene.add(yawObject);
+  currentScene = lobbyScene;
+  
+  console.log("✅ Lobby Scene loaded");
+}
 
-// 🆕 TRANSITION TO KITCHEN SCENE
+// ============================================================================
+// SCENE TRANSITIONS
+// ============================================================================
+
+// LOBBY → HALLWAY (after defeating boss and using bell)
+window.transitionToHallway = () => {
+  console.log("🚪 Transitioning to Hallway...");
+  
+  if (!currentScene || !currentScene.player || !currentScene.player.ghost) {
+    console.error("❌ Cannot transition: No valid player found");
+    return;
+  }
+  
+  const playerPosition = currentScene.player.ghost.position.clone();
+  const cameraRotation = { yaw: yaw, pitch: pitch };
+  
+  console.log("Player position before transition:", playerPosition);
+  
+  // Remove yawObject from old scene
+  if (currentScene.scene && yawObject.parent === currentScene.scene) {
+    currentScene.scene.remove(yawObject);
+  }
+  
+  // Reset camera position
+  camera.position.set(0, 1.6, 0);
+  
+  // Create hallway scene
+  hallwayScene = new HallwayScene(
+    renderer, 
+    camera, 
+    currentScene.player,
+    new THREE.Vector3(0, 1.6, 15), // Spawn at start of hallway
+    { yaw: 0, pitch: 0 } // Face forward
+  );
+  
+  hallwayScene.scene.add(yawObject);
+  yawObject.position.set(0, 1.6, 15);
+  currentScene = hallwayScene;
+  
+  const initialRotation = hallwayScene.getInitialCameraRotation();
+  yaw = initialRotation.yaw;
+  pitch = initialRotation.pitch;
+  
+  yawObject.rotation.y = yaw;
+  pitchObject.rotation.x = pitch;
+  
+  console.log("✅ Transitioned to Hallway");
+};
+
+// HALLWAY → BATHROOM (after completing puzzle)
+window.transitionToBathroom = () => {
+  console.log("🛁 Transitioning to Bathroom...");
+  
+  if (!currentScene || !currentScene.player || !currentScene.player.ghost) {
+    console.error("❌ Cannot transition: No valid player found");
+    return;
+  }
+  
+  const playerPosition = currentScene.player.ghost.position.clone();
+  const cameraRotation = { yaw: yaw, pitch: pitch };
+  
+  // Clean up hallway
+  if (currentScene.dispose) {
+    currentScene.dispose();
+  }
+  
+  // Remove yawObject from old scene
+  if (currentScene.scene && yawObject.parent === currentScene.scene) {
+    currentScene.scene.remove(yawObject);
+  }
+  
+  // Reset camera position
+  camera.position.set(0, 1.6, 0);
+  
+  // Create bathroom scene
+  bathroomScene = new BathroomScene(
+    renderer, 
+    camera, 
+    currentScene.player,
+    new THREE.Vector3(0, 1.6, 5), // Spawn position in bathroom
+    { yaw: 0, pitch: 0 }
+  );
+  
+  bathroomScene.scene.add(yawObject);
+  yawObject.position.set(0, 1.6, 5);
+  currentScene = bathroomScene;
+  
+  const initialRotation = bathroomScene.getInitialCameraRotation();
+  yaw = initialRotation.yaw;
+  pitch = initialRotation.pitch;
+  
+  yawObject.rotation.y = yaw;
+  pitchObject.rotation.x = pitch;
+  
+  console.log("✅ Transitioned to Bathroom");
+};
+
+// BATHROOM → KITCHEN (after defeating bathroom boss)
 window.transitionToKitchen = () => {
   console.log("🍳 Transitioning to Kitchen...");
   
@@ -339,22 +377,25 @@ window.transitionToKitchen = () => {
   
   console.log("Player position before transition:", playerPosition);
   
+  // Remove yawObject from old scene
   if (currentScene.scene && yawObject.parent === currentScene.scene) {
     currentScene.scene.remove(yawObject);
   }
   
+  // Reset camera position
   camera.position.set(0, 1.6, 0);
   
+  // Create kitchen scene
   kitchenScene = new KitchenScene(
     renderer, 
     camera, 
     currentScene.player,
-    playerPosition,
-    cameraRotation
+    new THREE.Vector3(0, 0.8, 5), // Spawn in kitchen (adjusted for smaller player)
+    { yaw: 0, pitch: 0 }
   );
   
   kitchenScene.scene.add(yawObject);
-  yawObject.position.copy(playerPosition);
+  yawObject.position.set(0, 0.8, 5);
   currentScene = kitchenScene;
   
   const initialRotation = kitchenScene.getInitialCameraRotation();
@@ -364,75 +405,71 @@ window.transitionToKitchen = () => {
   yawObject.rotation.y = yaw;
   pitchObject.rotation.x = pitch;
   
-  console.log(`✅ Transitioned to kitchen at position (${playerPosition.x.toFixed(1)}, ${playerPosition.y.toFixed(1)}, ${playerPosition.z.toFixed(1)})`);
+  console.log(`✅ Transitioned to Kitchen at position (${playerPosition.x.toFixed(1)}, ${playerPosition.y.toFixed(1)}, ${playerPosition.z.toFixed(1)})`);
 };
 
-// Existing transitions
-window.transitionToHallway = () => {
-  console.log("🚪 Transitioning to Hallway...");
-  
-  if (!currentScene || !currentScene.player || !currentScene.player.ghost) {
-    console.error("❌ Cannot transition: No valid player found");
-    return;
-  }
-  
-  const playerPosition = currentScene.player.ghost.position.clone();
-  const cameraRotation = { yaw: yaw, pitch: pitch };
-  
-  if (currentScene.scene && yawObject.parent === currentScene.scene) {
-    currentScene.scene.remove(yawObject);
-  }
-  
-  camera.position.set(0, 1.6, 0);
-  
-  hallwayScene = new HallwayScene(renderer, camera, currentScene.player, playerPosition, cameraRotation);
-  hallwayScene.scene.add(yawObject);
-  yawObject.position.copy(playerPosition);
-  currentScene = hallwayScene;
-  
-  const initialRotation = hallwayScene.getInitialCameraRotation();
-  yaw = initialRotation.yaw;
-  pitch = initialRotation.pitch;
-  
-  yawObject.rotation.y = yaw;
-  pitchObject.rotation.x = pitch;
-  
-  console.log(`✅ Transitioned to hallway`);
-};
-
-window.transitionToBathroom = () => {
-  console.log("🚿 Transitioning to Bathroom...");
-  
-  if (!currentScene || !currentScene.player || !currentScene.player.ghost) {
-    console.error("❌ Cannot transition: No valid player found");
-    return;
-  }
-  
-  const playerPosition = currentScene.player.ghost.position.clone();
-  const cameraRotation = { yaw: yaw, pitch: pitch };
-  
-  if (currentScene.scene && yawObject.parent === currentScene.scene) {
-    currentScene.scene.remove(yawObject);
-  }
-  
-  camera.position.set(0, 1.6, 0);
-  
-  bathroomScene = new BathroomScene(renderer, camera, currentScene.player, playerPosition, cameraRotation);
-  bathroomScene.scene.add(yawObject);
-  yawObject.position.copy(playerPosition);
-  currentScene = bathroomScene;
-  
-  const initialRotation = bathroomScene.getInitialCameraRotation();
-  yaw = initialRotation.yaw;
-  pitch = initialRotation.pitch;
-  
-  yawObject.rotation.y = yaw;
-  pitchObject.rotation.x = pitch;
-  
-  console.log(`✅ Transitioned to bathroom`);
-};
-
+// KITCHEN → NEXT LEVEL (placeholder for future levels)
 window.transitionToNextLevel = () => {
-  console.log("🎉 Kitchen complete! Transitioning to next level...");
-  alert("Kitchen complete! Next level not implemented yet.");
+  console.log("🎉 Kitchen complete! Game progression...");
+  
+  const victoryOverlay = document.createElement("div");
+  victoryOverlay.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(135deg, rgba(0, 50, 0, 0.95), rgba(0, 20, 0, 0.98));
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    z-index: 10001; font-family: Arial, sans-serif; color: white; text-align: center;
+  `;
+  
+  victoryOverlay.innerHTML = `
+    <h1 style="font-size: 64px; color: #00ff00; text-shadow: 0 0 20px #00ff00; margin-bottom: 20px;">
+      🎊 CONGRATULATIONS! 🎊
+    </h1>
+    <p style="font-size: 28px; margin: 20px 0; max-width: 800px; line-height: 1.6;">
+      You've successfully cleared all available levels!
+    </p>
+    <div style="background: rgba(0, 0, 0, 0.5); padding: 30px; border-radius: 15px; margin: 30px;">
+      <h2 style="color: #ffcc00; margin-bottom: 15px;">Achievements Unlocked:</h2>
+      <p style="font-size: 20px; margin: 10px 0;">✅ Defeated the Bellboy Ghost (Lobby)</p>
+      <p style="font-size: 20px; margin: 10px 0;">✅ Solved the Hallway Puzzle</p>
+      <p style="font-size: 20px; margin: 10px 0;">✅ Defeated the Bathroom Boss</p>
+      <p style="font-size: 20px; margin: 10px 0;">✅ Cleared the Haunted Kitchen</p>
+    </div>
+    <p style="font-size: 18px; color: #aaaaaa; margin-top: 30px;">
+      More levels coming soon! Thank you for playing! 👻
+    </p>
+    <button id="return-to-menu" style="
+      margin-top: 40px; padding: 20px 50px; font-size: 24px; font-weight: bold;
+      background: linear-gradient(to bottom, #00aa00, #00ff00);
+      color: white; border: none; border-radius: 12px; cursor: pointer;
+      box-shadow: 0 5px 20px rgba(0, 255, 0, 0.5);
+    ">Return to Main Menu</button>
+  `;
+  
+  document.body.appendChild(victoryOverlay);
+  
+  const returnBtn = document.getElementById("return-to-menu");
+  if (returnBtn) {
+    returnBtn.onclick = () => {
+      window.location.reload(); // Reload game to start fresh
+    };
+  }
 };
+
+// ============================================================================
+// MAIN MENU RETURN
+// ============================================================================
+window.returnToMainMenu = () => {
+  console.log("🏠 Returning to main menu...");
+  window.location.reload();
+};
+
+// ============================================================================
+// START GAME
+// ============================================================================
+init().catch((error) => console.error("Init failed:", error));
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});

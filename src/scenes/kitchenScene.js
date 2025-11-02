@@ -8,76 +8,116 @@ import Inventory from "../systems/inventory.js";
 import KitchenGhost from "../entities/kitchenGhost.js";
 
 export default class KitchenScene {
-  constructor(renderer, camera, player, playerPosition, cameraRotation) {
-    this.renderer = renderer;
-    this.camera = camera;
-    this.scene = new THREE.Scene();
-    this.clock = new THREE.Clock();
+// Replace the constructor in kitchenScene.js with this:
 
-    if (player) {
-      this.player = player;
-      this.player.ghost.position.copy(playerPosition);
-      this.player.ghost.position.y = 1.5;
-    } else {
-      this.hud = new HUD();
-      this.player = new Player(this.scene, this.camera, this.hud);
-      this.player.loadGhost("/public/assets/models/scene.gltf");
-      this.player.loadGun("/public/assets/models/gun.glb");
+constructor(renderer, camera, player, playerPosition, cameraRotation) {
+  this.renderer = renderer;
+  this.camera = camera;
+  this.scene = new THREE.Scene();
+  this.clock = new THREE.Clock();
+
+if (player) {
+  this.player = player;
+  // Scale down the player model (safely check if ghost exists)
+  if (this.player.ghost) {
+    this.player.ghost.scale.set(0.7, 0.7, 0.7);
+    this.player.ghost.position.copy(playerPosition);
+    this.player.ghost.position.y = 0.8;
+  }
+} else {
+  this.hud = new HUD();
+  this.player = new Player(this.scene, this.camera, this.hud);
+  // Scale down the player model after it loads
+  this.player.loadGhost("/assets/models/mainchar.glb").then(() => {
+    if (this.player.ghost) {
+      this.player.ghost.scale.set(0.7, 0.7, 0.7);
+      this.player.ghost.position.y = 0.8;
     }
+  });
+  this.player.loadGun("/assets/models/gun.glb");
+}
 
-    this.physics = new PhysicsSystem(this.scene);
-    this.inventory = new Inventory(null);
-    this.ghostTransitionActive = false;
+  // CRITICAL: Expose player through scene.userData for main.js
+  this.scene.userData.player = this.player;
 
-    this.initialCameraRotation = cameraRotation || { yaw: 0, pitch: 0 };
 
-    this.kitchenModel = null;
-    this.interactiveObjects = [];
-    this.possessedObjects = [];
-    this.correctPossessedIndices = [];
-    this.objectsDestroyed = 0;
-    this.objectsToDestroy = 3;
-    this.currentPhase = "intro";
-    this.selectedObject = null;
-    this.kitchenGhost = null;
-    this.gameOver = false;
-    this.clickCooldown = false;
-    this.dustParticles = [];
+  this.physics = new PhysicsSystem(this.scene);
+  this.inventory = new Inventory(null);
+  this.ghostTransitionActive = false;
 
-    this.raycaster = new THREE.Raycaster();
-    this.mouse = new THREE.Vector2();
+  this.initialCameraRotation = cameraRotation || { yaw: 0, pitch: 0 };
 
-    this.combatActive = false;
-    this.combatTarget = null;
-    this.combatTargetHealth = 3;
-    this.combatMisses = 0;
+  // Camera/Player boundaries (adjusted for 2x scaled kitchen)
+  this.boundaries = {
+    minX: -9,
+    maxX: 9,
+    minZ: -6.5,
+    maxZ: 6.5,
+    minY: 0.5,
+    maxY: 5
+  };
 
-    this.smokeParticles = [];
-    this.steamParticles = [];
+  this.initialCameraRotation = cameraRotation || { yaw: 0, pitch: 0 };
 
-    this.setupLighting();
-    this.loadKitchenEnvironment().then(() => {
-      this.createInteractiveObjects();
-    });
-    this.createAmbientEffects();
-    this.setupMouseInteraction();
-    this.createCrosshair();
-    this.startIntroPhase();
+  this.kitchenModel = null;
+  this.interactiveObjects = [];
+  this.possessedObjects = [];
+  this.correctPossessedIndices = [];
+  this.objectsDestroyed = 0;
+  this.objectsToDestroy = 3;
+  this.currentPhase = "intro";
+  this.selectedObject = null;
+  this.kitchenGhost = null;
+  this.gameOver = false;
+  this.clickCooldown = false;
+  this.dustParticles = [];
 
-    window.kitchenScene = this;
-  }
+  this.raycaster = new THREE.Raycaster();
+  this.mouse = new THREE.Vector2();
 
-  createCrosshair() {
-    this.crosshair = document.createElement("div");
-    this.crosshair.style.cssText = `
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 4px; height: 4px; background: rgba(255, 255, 255, 0.8);
-      border: 2px solid rgba(0, 0, 0, 0.5); border-radius: 50%;
-      pointer-events: none; z-index: 9000;
-      box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-    `;
-    document.body.appendChild(this.crosshair);
-  }
+  this.combatActive = false;
+  this.combatTarget = null;
+  this.combatTargetHealth = 3;
+  this.combatMisses = 0;
+
+  this.smokeParticles = [];
+  this.steamParticles = [];
+
+  this.setupLighting();
+  this.loadKitchenEnvironment().then(() => {
+    this.createInteractiveObjects();
+  });
+  this.createAmbientEffects();
+  this.setupMouseInteraction();
+  this.createCrosshair();
+  this.startIntroPhase();
+
+  window.kitchenScene = this;
+}
+
+// Add this method to KitchenScene class for camera initialization:
+getInitialCameraRotation() {
+  return this.initialCameraRotation;
+}
+
+createCrosshair() {
+  this.crosshair = document.createElement("div");
+  this.crosshair.style.cssText = `
+    position: fixed; 
+    top: 50%; 
+    left: 50%; 
+    transform: translate(-50%, -50%);
+    width: 4px; 
+    height: 4px; 
+    background: rgba(255, 255, 255, 0.8);
+    border: 2px solid rgba(0, 0, 0, 0.5); 
+    border-radius: 50%;
+    pointer-events: none; 
+    z-index: 9000;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  `;
+  document.body.appendChild(this.crosshair);
+}
 
   updateCrosshair(color, size) {
     if (!this.crosshair) return;
@@ -104,80 +144,121 @@ export default class KitchenScene {
     window.addEventListener('click', this.clickHandler);
   }
 
-  setupLighting() {
-    const ambient = new THREE.AmbientLight(0xffaa77, 0.2);
-    this.scene.add(ambient);
+setupLighting() {
+  // MUCH BRIGHTER ambient light for overall visibility
+  const ambient = new THREE.AmbientLight(0xffeedd, 0.6); // Increased from 0.2 to 0.6
+  this.scene.add(ambient);
 
-    this.mainLight = new THREE.PointLight(0xffdd88, 0.7, 25);
-    this.mainLight.position.set(0, 5, 0);
-    this.mainLight.castShadow = true;
-    this.scene.add(this.mainLight);
+  // Main overhead light - MUCH BRIGHTER
+  this.mainLight = new THREE.PointLight(0xffffee, 1.8, 35); // Increased intensity and range
+  this.mainLight.position.set(0, 6, 0);
+  this.mainLight.castShadow = true;
+  this.mainLight.shadow.mapSize.width = 2048;
+  this.mainLight.shadow.mapSize.height = 2048;
+  this.scene.add(this.mainLight);
 
-    this.ovenLight = new THREE.PointLight(0xff3300, 1.5, 15);
-    this.ovenLight.position.set(0, 2, -8);
-    this.ovenLight.castShadow = true;
-    this.scene.add(this.ovenLight);
+  // Additional overhead lights for even coverage
+  const overheadLight1 = new THREE.PointLight(0xffffee, 1.2, 25);
+  overheadLight1.position.set(-5, 5, 0);
+  this.scene.add(overheadLight1);
 
-    this.stoveLights = [];
-    for (let i = 0; i < 4; i++) {
-      const light = new THREE.PointLight(0xff6600, 0.8, 5);
-      light.position.set(-6 + i * 4, 1.5, -6);
-      this.stoveLights.push(light);
-      this.scene.add(light);
-    }
+  const overheadLight2 = new THREE.PointLight(0xffffee, 1.2, 25);
+  overheadLight2.position.set(5, 5, 0);
+  this.scene.add(overheadLight2);
 
-    this.fridgeLight = new THREE.PointLight(0x4488ff, 0.5, 8);
-    this.fridgeLight.position.set(8, 2, -4);
-    this.scene.add(this.fridgeLight);
+  const overheadLight3 = new THREE.PointLight(0xffffee, 1.2, 25);
+  overheadLight3.position.set(0, 5, -5);
+  this.scene.add(overheadLight3);
 
-    this.moonlight = new THREE.DirectionalLight(0x6688ff, 0.4);
-    this.moonlight.position.set(10, 15, 10);
-    this.moonlight.castShadow = true;
-    this.moonlight.shadow.camera.left = -20;
-    this.moonlight.shadow.camera.right = 20;
-    this.moonlight.shadow.camera.top = 20;
-    this.moonlight.shadow.camera.bottom = -20;
-    this.scene.add(this.moonlight);
+  const overheadLight4 = new THREE.PointLight(0xffffee, 1.2, 25);
+  overheadLight4.position.set(0, 5, 5);
+  this.scene.add(overheadLight4);
 
-    this.counterSpot1 = new THREE.SpotLight(0xffffff, 0.5, 12, Math.PI / 5);
-    this.counterSpot1.position.set(-4, 4, -3);
-    this.counterSpot1.target.position.set(-4, 1.5, -5);
-    this.scene.add(this.counterSpot1, this.counterSpot1.target);
+  // Oven light (keep dramatic but not too dark)
+  this.ovenLight = new THREE.PointLight(0xff4400, 1.2, 15);
+  this.ovenLight.position.set(0, 2, -8);
+  this.ovenLight.castShadow = true;
+  this.scene.add(this.ovenLight);
 
-    this.counterSpot2 = new THREE.SpotLight(0xffffff, 0.5, 12, Math.PI / 5);
-    this.counterSpot2.position.set(4, 4, -3);
-    this.counterSpot2.target.position.set(4, 1.5, -5);
-    this.scene.add(this.counterSpot2, this.counterSpot2.target);
-
-    this.hangingLights = [];
-    for (let i = 0; i < 3; i++) {
-      const light = new THREE.PointLight(0xffffcc, 0.4, 8);
-      light.position.set(-5 + i * 5, 3.5, 0);
-      this.hangingLights.push(light);
-      this.scene.add(light);
-
-      const bulbGeo = new THREE.SphereGeometry(0.15, 8, 8);
-      const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
-      const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-      bulb.position.copy(light.position);
-      this.scene.add(bulb);
-    }
-
-    this.atmosphericLights = [];
-    const colors = [0xff0055, 0x00ff88, 0x8800ff, 0xff9900];
-    for (let i = 0; i < 4; i++) {
-      const light = new THREE.PointLight(colors[i], 0, 10);
-      light.position.set(
-        (Math.random() - 0.5) * 16,
-        2 + Math.random() * 2,
-        (Math.random() - 0.5) * 12
-      );
-      light.userData.targetIntensity = 0;
-      light.userData.pulseSpeed = 0.5 + Math.random() * 1.5;
-      this.atmosphericLights.push(light);
-      this.scene.add(light);
-    }
+  // Stove lights
+  this.stoveLights = [];
+  for (let i = 0; i < 4; i++) {
+    const light = new THREE.PointLight(0xff7700, 1.0, 6);
+    light.position.set(-6 + i * 4, 1.5, -6);
+    this.stoveLights.push(light);
+    this.scene.add(light);
   }
+
+  // Fridge light
+  this.fridgeLight = new THREE.PointLight(0x6699ff, 0.8, 10);
+  this.fridgeLight.position.set(8, 2, -4);
+  this.scene.add(this.fridgeLight);
+
+  // Bright directional moonlight
+  this.moonlight = new THREE.DirectionalLight(0x8899ff, 0.8); // Increased from 0.4
+  this.moonlight.position.set(10, 15, 10);
+  this.moonlight.castShadow = true;
+  this.moonlight.shadow.camera.left = -20;
+  this.moonlight.shadow.camera.right = 20;
+  this.moonlight.shadow.camera.top = 20;
+  this.moonlight.shadow.camera.bottom = -20;
+  this.scene.add(this.moonlight);
+
+  // Counter spotlights - BRIGHTER
+  this.counterSpot1 = new THREE.SpotLight(0xffffff, 1.2, 15, Math.PI / 4);
+  this.counterSpot1.position.set(-4, 5, -3);
+  this.counterSpot1.target.position.set(-4, 1.5, -5);
+  this.scene.add(this.counterSpot1, this.counterSpot1.target);
+
+  this.counterSpot2 = new THREE.SpotLight(0xffffff, 1.2, 15, Math.PI / 4);
+  this.counterSpot2.position.set(4, 5, -3);
+  this.counterSpot2.target.position.set(4, 1.5, -5);
+  this.scene.add(this.counterSpot2, this.counterSpot2.target);
+
+  // Hanging lights - BRIGHTER
+  this.hangingLights = [];
+  for (let i = 0; i < 3; i++) {
+    const light = new THREE.PointLight(0xffffdd, 0.9, 10);
+    light.position.set(-5 + i * 5, 3.5, 0);
+    this.hangingLights.push(light);
+    this.scene.add(light);
+
+    const bulbGeo = new THREE.SphereGeometry(0.15, 8, 8);
+    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
+    const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+    bulb.position.copy(light.position);
+    this.scene.add(bulb);
+  }
+
+  // Wall lights for better coverage
+  const wallLight1 = new THREE.PointLight(0xffffee, 0.8, 12);
+  wallLight1.position.set(-9, 3, 0);
+  this.scene.add(wallLight1);
+
+  const wallLight2 = new THREE.PointLight(0xffffee, 0.8, 12);
+  wallLight2.position.set(9, 3, 0);
+  this.scene.add(wallLight2);
+
+  // Atmospheric lights (keep these subtle)
+  this.atmosphericLights = [];
+  const colors = [0xff0055, 0x00ff88, 0x8800ff, 0xff9900];
+  for (let i = 0; i < 4; i++) {
+    const light = new THREE.PointLight(colors[i], 0, 10);
+    light.position.set(
+      (Math.random() - 0.5) * 16,
+      2 + Math.random() * 2,
+      (Math.random() - 0.5) * 12
+    );
+    light.userData.targetIntensity = 0;
+    light.userData.pulseSpeed = 0.5 + Math.random() * 1.5;
+    this.atmosphericLights.push(light);
+    this.scene.add(light);
+  }
+
+  // Add hemisphere light for natural fill lighting
+  const hemiLight = new THREE.HemisphereLight(0xffffee, 0x887755, 0.4);
+  this.scene.add(hemiLight);
+}
 
   async loadKitchenEnvironment() {
     const loader = new GLTFLoader();

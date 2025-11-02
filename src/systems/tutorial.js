@@ -1,23 +1,36 @@
 // src/systems/tutorial.js
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 export default class Tutorial {
   constructor(hud, lobbyScene, player) {
     this.hud = hud;
-    this.lobbyScene = lobbyScene; // Store reference to lobby scene
-    this.scene = lobbyScene.scene; // Store reference to Three.js scene for adding objects
+    this.lobbyScene = lobbyScene;
+    this.scene = lobbyScene.scene;
     this.player = player;
+    this.playerSpawnPos = null;
     this.phase = 0;
     this.marker = null;
     this.subgoalsUI = null;
     this.progressBar = null;
     this.progressFill = null;
 
+    this.orbModels = []; // Array of loaded orb models
+    this.modelsLoaded = false; // Track if models are loaded
+    // One scale per model, matches the model's default size
+    this.orbScales = [
+      3.0, // model 0 (first orb)
+      3.0, // model 1 (forward)
+      0.2, // model 2 (left)
+      3.0, // model 3 (right)
+      3.0, // model 4 (back)
+    ];
+
     // Phase 0: Looking around
     this.initialYaw = null;
     this.initialPitch = null;
     this.cameraMovementDetected = false;
-    this.cameraMovementThreshold = 0.3; // radians
+    this.cameraMovementThreshold = 0.3;
 
     // Phase 2: Movement training
     this.movementProgress = {
@@ -33,23 +46,38 @@ export default class Tutorial {
     this.spiritsFreed = 0;
     this.totalSpirits = 5;
 
-    // Define phases (removed "longDistance")
+    // Define phases
     this.phases = [
-      { type: "look", msg: "Welcome to the Cozy Ghost Hotel! Let's learn the basics." },
-      { type: "firstMove", msg: "Reach the glowing cyan orb!", pos: new THREE.Vector3(5, 1.5, 3) },
-      { type: "movementTraining", msg: "Excellent! Now learn all movement directions." },
-      { type: "spiritRelease", msg: "Click to shoot the suspicious objects and free the spirits!" },
+      {
+        type: "look",
+        msg: "Welcome to the Cozy Ghost Hotel! Let's learn the basics.",
+      },
+      {
+        type: "firstMove",
+        msg: "Pick up the bucket, this place needs a good scrub!",
+        pos: new THREE.Vector3(5, 1.5, 3),
+      },
+      {
+        type: "movementTraining",
+        msg: "Excellent! Now learn all movement directions.",
+      },
+      {
+        type: "spiritRelease",
+        msg: "Click to shoot the suspicious objects and free the spirits!",
+      },
     ];
   }
 
   start(yaw, pitch) {
     this.initialYaw = yaw;
     this.initialPitch = pitch;
+    this.playerSpawnPos = this.player.ghost.position.clone();
 
+    // Only show the welcome message here
     this.showMessage(this.phases[0].msg);
 
+    // Start the first phase after a short delay
     setTimeout(() => {
-      this.showMessage("Double-click to enable Look Mode, then move your mouse to look around. Press ESC to exit Look Mode.");
       this.executePhase();
     }, 2000);
   }
@@ -64,76 +92,117 @@ export default class Tutorial {
 
     switch (currentPhase.type) {
       case "look":
+        // Only show double-click message when tutorial is actually in the look phase
+        if (!this.cameraMovementDetected) {
+          this.showMessage(
+            "Double-click to enable Look Mode, then move your mouse to look around. Press ESC to exit Look Mode.",
+            "40px"
+          );
+        }
         break;
+
       case "firstMove":
-        this.spawnMarker(currentPhase.pos, 0x00ffcc);
+        this.spawnMarker(currentPhase.pos, 0); // Use model index 0
         this.showMessage(currentPhase.msg + " Use WASD or Arrow Keys to move.");
         break;
+
       case "movementTraining":
         this.startMovementTraining();
         break;
+
       case "spiritRelease":
         this.startSpiritRelease();
         break;
     }
   }
 
+  async loadOrbModels(urls) {
+    const loader = new GLTFLoader();
+    this.orbModels = [];
+
+    for (const url of urls) {
+      try {
+        const gltf = await loader.loadAsync(url);
+        const model = gltf.scene;
+
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+
+        this.orbModels.push(model);
+        console.log(`✅ Loaded orb model: ${url}`);
+      } catch (err) {
+        console.error(`❌ Failed to load orb model: ${url}`, err);
+      }
+    }
+
+    this.modelsLoaded = true;
+    console.log(`✅ All orb models loaded. Total: ${this.orbModels.length}`);
+  }
+
   startMovementTraining() {
-    this.showMessage(this.phases[2].msg + " Use WASD or Arrow Keys. Try diagonal movement by pressing two keys!");
-    this.createSubgoalsUI();
-    this.createProgressBar();
+    this.showMessage(
+      this.phases[2].msg +
+        " Use WASD or Arrow Keys. Try diagonal movement by pressing two keys!"
+    );
 
-    const playerPos = this.player.ghost.position.clone();
+    this.createSubgoalsUI(); // already creates progress bar inside
 
-    // Safe positions relative to player, staying within room bounds
+    const spawnPos = this.playerSpawnPos.clone();
+
     const directions = [
-      { key: "forward", offset: new THREE.Vector3(0, 0, -4) },
-      { key: "left", offset: new THREE.Vector3(-4, 0, 0) },
-      { key: "right", offset: new THREE.Vector3(4, 0, 0) },
-      { key: "back", offset: new THREE.Vector3(0, 0, 4) },
+      { key: "forward", offset: new THREE.Vector3(0, 0, -4), modelIndex: 1 },
+      { key: "left", offset: new THREE.Vector3(-4, 0, 0), modelIndex: 2 },
+      { key: "right", offset: new THREE.Vector3(4, 0, 0), modelIndex: 3 },
+      { key: "back", offset: new THREE.Vector3(0, 0, 4), modelIndex: 0 },
     ];
 
     directions.forEach((dir) => {
-      let orbPos = playerPos.clone().add(dir.offset);
+      let orbPos = spawnPos.clone().add(dir.offset);
       orbPos.y = 1.5;
 
-      // Clamp to room bounds (approximate lobby size)
+      // Clamp to room bounds
       orbPos.x = Math.max(-20, Math.min(20, orbPos.x));
       orbPos.z = Math.max(-15, Math.min(15, orbPos.z));
 
-      const orb = this.createOrb(orbPos, 0xffff00);
+      const orb = this.createOrb(orbPos, dir.modelIndex);
       orb.userData.direction = dir.key;
       this.movementOrbs.push(orb);
       this.scene.add(orb);
     });
+
+    // Reset movementPhaseCompleted for this run
+    this.movementPhaseCompleted = false;
   }
 
   startSpiritRelease() {
-    this.showMessage(this.phases[3].msg + " Click your mouse/trackpad to shoot!");
+    this.showMessage(
+      this.phases[3].msg + " Click your mouse/trackpad to shoot!"
+    );
     this.createSpiritUI();
     this.player.enterCombat();
 
-    const playerPos = this.player.ghost.position.clone();
+    const spawnPos = this.playerSpawnPos.clone(); // use spawn position
 
-    // Safer positions - closer to player and within room bounds
-    // Positioned in open areas away from furniture
     const positions = [
-      new THREE.Vector3(-4, 3.5, -6),  // Left front
-      new THREE.Vector3(4, 3.5, -6),   // Right front
-      new THREE.Vector3(-5, 3.5, 0),   // Left center
-      new THREE.Vector3(5, 3.5, 0),    // Right center
-      new THREE.Vector3(0, 3.5, -8),   // Center front
+      new THREE.Vector3(-4, 3.5, -6),
+      new THREE.Vector3(4, 3.5, -6),
+      new THREE.Vector3(-5, 3.5, 0),
+      new THREE.Vector3(5, 3.5, 0),
+      new THREE.Vector3(0, 3.5, -8),
     ];
 
     const colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0xff00ff];
 
     positions.forEach((offset, index) => {
-      let boxPos = playerPos.clone().add(offset);
+      let boxPos = spawnPos.clone().add(offset);
 
-      // Clamp to room bounds
       boxPos.x = Math.max(-18, Math.min(18, boxPos.x));
       boxPos.z = Math.max(-12, Math.min(12, boxPos.z));
-      boxPos.y = 3.5; // Higher up - easier to see and shoot
+      boxPos.y = 3.5;
 
       const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
       const material = new THREE.MeshStandardMaterial({
@@ -152,21 +221,43 @@ export default class Tutorial {
     });
   }
 
-  createOrb(position, color) {
-    const geometry = new THREE.SphereGeometry(0.3, 16, 16);
-    const material = new THREE.MeshStandardMaterial({
-      color: color,
-      emissive: color,
-      emissiveIntensity: 1,
-    });
-    const orb = new THREE.Mesh(geometry, material);
-    orb.position.copy(position);
+  createOrb(position, modelIndex) {
+    let orb;
+
+    if (this.modelsLoaded && this.orbModels[modelIndex]) {
+      orb = this.orbModels[modelIndex].clone();
+      orb.position.copy(position);
+
+      const scale = this.orbScales[modelIndex] || 1.0;
+      orb.scale.set(scale, scale, scale);
+
+      // store base scale for pulsing
+      orb.userData.baseScale = scale;
+
+      orb.traverse((child) => {
+        if (child.isMesh && child.material) {
+          child.material.needsUpdate = true;
+        }
+      });
+    } else {
+      const geometry = new THREE.SphereGeometry(0.3, 16, 16);
+      const material = new THREE.MeshStandardMaterial({
+        color: 0xffff00,
+        emissive: 0xffff00,
+        emissiveIntensity: 1,
+      });
+      orb = new THREE.Mesh(geometry, material);
+      orb.position.copy(position);
+
+      orb.userData.baseScale = 0.3; // store fallback scale
+    }
+
     return orb;
   }
 
-  spawnMarker(position, color) {
+  spawnMarker(position, modelIndex) {
     const playerPos = this.player.ghost.position.clone();
-    this.marker = this.createOrb(position, color);
+    this.marker = this.createOrb(position, modelIndex);
 
     if (this.phase === 1) {
       this.marker.position.copy(playerPos);
@@ -174,15 +265,21 @@ export default class Tutorial {
       this.marker.position.z -= 5;
       this.marker.position.y = 1.5;
 
-      // Clamp to room bounds
-      this.marker.position.x = Math.max(-20, Math.min(20, this.marker.position.x));
-      this.marker.position.z = Math.max(-15, Math.min(15, this.marker.position.z));
+      this.marker.position.x = Math.max(
+        -20,
+        Math.min(20, this.marker.position.x)
+      );
+      this.marker.position.z = Math.max(
+        -15,
+        Math.min(15, this.marker.position.z)
+      );
     }
 
     this.scene.add(this.marker);
   }
 
   createSubgoalsUI() {
+    // Container for both text and progress bar
     this.subgoalsUI = document.createElement("div");
     this.subgoalsUI.style.position = "absolute";
     this.subgoalsUI.style.top = "120px";
@@ -193,24 +290,28 @@ export default class Tutorial {
     this.subgoalsUI.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
     this.subgoalsUI.style.padding = "15px";
     this.subgoalsUI.style.borderRadius = "8px";
+    this.subgoalsUI.style.width = "250px"; // fixed width for layout
+    this.subgoalsUI.style.boxSizing = "border-box";
+
     this.subgoalsUI.innerHTML = `
       <div style="margin-bottom: 10px; font-weight: bold;">Movement Training:</div>
-      <div>Collect all glowing orbs!</div>
+      <div style="margin-bottom: 12px;">Collect all cleaning supplies!</div>
       <div style="margin-top: 8px; font-size: 14px; color: #00ffcc;">💡 Tip: Press two arrow keys together for diagonal movement</div>
     `;
+
     document.body.appendChild(this.subgoalsUI);
+
+    this.createProgressBar(); // create progress bar inside container
   }
 
   createProgressBar() {
     this.progressBar = document.createElement("div");
-    this.progressBar.style.position = "absolute";
-    this.progressBar.style.top = "200px";
-    this.progressBar.style.left = "20px";
-    this.progressBar.style.width = "200px";
+    this.progressBar.style.width = "100%";
     this.progressBar.style.height = "20px";
     this.progressBar.style.background = "rgba(255,255,255,0.2)";
     this.progressBar.style.border = "2px solid white";
     this.progressBar.style.borderRadius = "10px";
+    this.progressBar.style.marginTop = "10px"; // spacing below text
 
     this.progressFill = document.createElement("div");
     this.progressFill.style.height = "100%";
@@ -219,11 +320,13 @@ export default class Tutorial {
     this.progressFill.style.borderRadius = "8px";
 
     this.progressBar.appendChild(this.progressFill);
-    document.body.appendChild(this.progressBar);
+    this.subgoalsUI.appendChild(this.progressBar); // attach bar to container
   }
 
   updateProgressBar() {
-    const collected = Object.values(this.movementProgress).filter((v) => v).length;
+    const collected = Object.values(this.movementProgress).filter(
+      (v) => v
+    ).length;
     const percent = (collected / 4) * 100;
     if (this.progressFill) {
       this.progressFill.style.width = percent + "%";
@@ -303,28 +406,37 @@ export default class Tutorial {
     animate();
   }
 
-  releaseSpirit(position) {
-    this.rewardEffect(position, 0x00ffff);
-    this.spiritsFreed++;
-    this.updateSpiritUI();
-    this.showFloatingText("+1 Spirit!", position);
+// In tutorial.js, update the releaseSpirit function around line 358:
 
-    if (this.spiritsFreed >= this.totalSpirits) {
-      setTimeout(() => {
-        this.removeSubgoalsUI();
-        this.showMessage("🎉 Tutorial Complete! Get ready for the Boss Fight...");
-
-        setTimeout(() => {
-          // Notify lobby scene to start boss fight
-          if (this.lobbyScene && this.lobbyScene.startBossFight) {
-            this.lobbyScene.startBossFight();
-          }
-          this.phase++;
-          this.executePhase();
-        }, 3000);
-      }, 500);
-    }
+releaseSpirit(position) {
+  // CRITICAL: Only trigger boss fight if we're still in the lobby
+  if (window.currentScene === lobbyScene) {
+    console.log("⚠️ Tutorial spirit released but not in lobby - ignoring");
+    return;
   }
+  
+  this.rewardEffect(position, 0x00ffff);
+  this.spiritsFreed++;
+  this.updateSpiritUI();
+  this.showFloatingText("+1 Spirit!", position);
+
+  if (this.spiritsFreed >= this.totalSpirits) {
+    setTimeout(() => {
+      this.removeSubgoalsUI();
+      this.showMessage(
+        "🎉 Tutorial Complete! Get ready for the Boss Fight..."
+      );
+
+      setTimeout(() => {
+        if (this.lobbyScene && this.lobbyScene.startBossFight) {
+          this.lobbyScene.startBossFight();
+        }
+        this.phase++;
+        this.executePhase();
+      }, 3000);
+    }, 500);
+  }
+}
 
   update(keys, player, yaw, pitch, delta) {
     if (!player.ghost) return;
@@ -342,19 +454,23 @@ export default class Tutorial {
         this.updateMovementTraining(player);
         break;
       case "spiritRelease":
-        this.updateSpiritRelease();
+        //this.updateSpiritRelease();
         break;
-    }
-
-    if (this.marker) {
-      this.marker.rotation.y += 0.02;
-      this.marker.scale.setScalar(1 + Math.sin(Date.now() * 0.003) * 0.1);
     }
 
     this.movementOrbs.forEach((orb) => {
       orb.rotation.y += 0.02;
-      orb.scale.setScalar(1 + Math.sin(Date.now() * 0.003) * 0.1);
+      const baseScale = orb.userData.baseScale || 1.0;
+      const pulseAmount = Math.sin(Date.now() * 0.003) * 0.1;
+      orb.scale.setScalar(baseScale * (1 + pulseAmount));
     });
+
+    if (this.marker) {
+      this.marker.rotation.y += 0.02;
+      const baseScale = this.marker.userData.baseScale || 1.5;
+      const pulseAmount = Math.sin(Date.now() * 0.003) * 0.1;
+      this.marker.scale.setScalar(baseScale * (1 + pulseAmount));
+    }
 
     this.disguisedObjects.forEach((obj) => {
       obj.rotation.y += 0.01;
@@ -369,16 +485,34 @@ export default class Tutorial {
     const deltaPitch = Math.abs(pitch - this.initialPitch);
     const totalDelta = deltaYaw + deltaPitch;
 
-    // Debug logging
     if (totalDelta > 0.01) {
-      console.log(`Camera movement - Yaw: ${deltaYaw.toFixed(3)}, Pitch: ${deltaPitch.toFixed(3)}, Total: ${totalDelta.toFixed(3)}, Threshold: ${this.cameraMovementThreshold}`);
+      console.log(
+        `Camera movement - Yaw: ${deltaYaw.toFixed(
+          3
+        )}, Pitch: ${deltaPitch.toFixed(3)}, Total: ${totalDelta.toFixed(
+          3
+        )}, Threshold: ${this.cameraMovementThreshold}`
+      );
     }
 
     if (totalDelta > this.cameraMovementThreshold) {
       this.cameraMovementDetected = true;
-      this.showMessage("Great! You've mastered looking around. Press ESC to exit Look Mode.");
+
+      // Hide the "double-click" message
+      const existing = document.getElementById("tutorialMessage");
+      if (existing) existing.remove();
+
+      // Show success message slightly lower than top
+      this.showMessage(
+        "Great! You've mastered looking around. Press ESC to exit Look Mode.",
+        "40px"
+      );
 
       setTimeout(() => {
+        // Remove success message after 2s
+        const msg = document.getElementById("tutorialMessage");
+        if (msg) msg.remove();
+
         this.phase++;
         this.executePhase();
       }, 2000);
@@ -404,6 +538,8 @@ export default class Tutorial {
   }
 
   updateMovementTraining(player) {
+    if (this.movementPhaseCompleted) return;
+
     for (let i = this.movementOrbs.length - 1; i >= 0; i--) {
       const orb = this.movementOrbs[i];
       const distance = player.ghost.position.distanceTo(orb.position);
@@ -413,6 +549,8 @@ export default class Tutorial {
         this.movementProgress[direction] = true;
 
         this.rewardEffect(orb.position, 0xffff00);
+
+        // Remove orb safely
         this.scene.remove(orb);
         this.movementOrbs.splice(i, 1);
 
@@ -424,25 +562,30 @@ export default class Tutorial {
       }
     }
 
-    const allCompleted = Object.values(this.movementProgress).every((v) => v === true);
-    if (allCompleted && this.movementOrbs.length === 0) {
-      this.showMessage("Great job! Time for the next challenge...");
-      this.removeSubgoalsUI();
-      this.removeProgressBar();
+    // Check if all movement directions are completed
+    const allCompleted = Object.values(this.movementProgress).every(
+      (v) => v === true
+    );
 
+    if (allCompleted && this.movementOrbs.length === 0) {
+      this.movementPhaseCompleted = true;
+
+      this.showMessage("Great job! Time for the next challenge...");
+
+      // Remove UI safely
+      this.removeSubgoalsUI();
+
+      // Reset movementProgress for possible future use
+      Object.keys(this.movementProgress).forEach(
+        (k) => (this.movementProgress[k] = false)
+      );
+
+      // Delay before starting next phase
       setTimeout(() => {
         this.phase++;
-        this.executePhase();
-      }, 2000);
+        this.executePhase(); // properly starts shooting challenge
+      }, 1500);
     }
-  }
-
-  updateSpiritRelease() {
-    // handled by player's shoot()
-  }
-
-  complete() {
-    this.showMessage("");
   }
 
   rewardEffect(position, color = 0xffff00) {
@@ -459,25 +602,55 @@ export default class Tutorial {
     this.scene.add(particles);
 
     let t = 0;
+    const maxFrames = 60; // roughly 1 second animation at 60fps
     const animate = () => {
-      t += 0.05;
+      t++;
       particles.children.forEach((p) => {
         p.position.x += (Math.random() - 0.5) * 0.1;
         p.position.y += 0.1;
         p.position.z += (Math.random() - 0.5) * 0.1;
       });
-      if (t < 20) {
+
+      if (t < maxFrames) {
         requestAnimationFrame(animate);
       } else {
+        // Safely remove and dispose particles
         this.scene.remove(particles);
+        particles.traverse((child) => {
+          if (child.isMesh) {
+            child.geometry.dispose();
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => m.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        });
       }
     };
     animate();
   }
 
-  showMessage(msg) {
-    if (this.hud && this.hud.showMessage) {
-      this.hud.showMessage(msg);
-    }
+  showMessage(msg, top = "20px") {
+    // Remove existing message first
+    const existing = document.getElementById("tutorialMessage");
+    if (existing) existing.remove();
+
+    const div = document.createElement("div");
+    div.id = "tutorialMessage";
+    div.innerText = msg;
+    div.style.position = "absolute";
+    div.style.top = top; // allows positioning higher/lower
+    div.style.left = "50%";
+    div.style.transform = "translateX(-50%)";
+    div.style.color = "white";
+    div.style.background = "rgba(0,0,0,0.7)";
+    div.style.padding = "10px 20px";
+    div.style.borderRadius = "10px";
+    div.style.zIndex = "9999";
+    div.style.fontFamily = "Arial, sans-serif";
+    div.style.fontSize = "16px";
+
+    document.body.appendChild(div);
   }
 }

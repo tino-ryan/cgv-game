@@ -342,33 +342,39 @@ export default class BathroomScene {
     this.updateWithCameraRotation(0, 0);
   }
 
-  async handleBossDefeat() {
-    if (this.boss.defeatedHandled) return;
-    this.boss.defeatedHandled = true;
+async handleBossDefeat() {
+  if (this.boss.defeatedHandled) return;
+  this.boss.defeatedHandled = true;
 
-    this.hud.showMessage("🎉 Victory! The Tile Phantom has been defeated!");
-    this.player.exitCombat();
+  this.hud.showMessage("🎉 Victory! The Soap Ghost has been defeated!");
+  this.player.exitCombat();
 
-    if (this.bossHealthFill?.parentElement) {
-      try {
-        this.bossHealthFill.parentElement.parentElement.removeChild(
-          this.bossHealthFill.parentElement
-        );
-      } catch (e) {}
-      this.bossHealthFill = null;
+  if (this.bossHealthFill && this.bossHealthFill.parentElement) {
+    try {
+      this.bossHealthFill.parentElement.parentElement.removeChild(
+        this.bossHealthFill.parentElement
+      );
+    } catch (e) {
+      console.error("Error cleaning up boss health bar:", e);
     }
-
-    setTimeout(() => {
-      this.hud.showMessage("The bathroom is now clear... But what lies ahead?");
-      setTimeout(() => {
-        this.hud.showMessage("");
-        // Transition to next level
-        if (window.transitionToNextLevel) {
-          window.transitionToNextLevel();
-        }
-      }, 3000);
-    }, 2000);
+    this.bossHealthFill = null;
   }
+
+  setTimeout(() => {
+    this.hud.showMessage("The bathroom is cleansed! Moving to the kitchen...");
+    
+    setTimeout(() => {
+      // Transition to Kitchen
+      if (window.transitionToKitchen) {
+        console.log("🍳 Bathroom complete - transitioning to Kitchen");
+        window.transitionToKitchen();
+      } else {
+        console.error("❌ transitionToKitchen function not found!");
+        this.hud.showMessage("ERROR: Kitchen transition not available");
+      }
+    }, 2000);
+  }, 2000);
+}
 
   getCameraSnapRotation() {
     return null;
