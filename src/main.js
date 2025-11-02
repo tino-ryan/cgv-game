@@ -6,10 +6,12 @@ import { tutorialCutscene } from "./cutscenes/tutorialCutscene.js";
 import SceneManager from "./systems/sceneManager.js";
 import TitleMenu from "./scenes/titleMenu.js";
 import PauseMenu from "./ui/pauseMenu.js";
+import AudioManager from "./systems/audiomanager.js";
 
 let renderer, camera, lobbyScene, sceneManager;
 let isPaused = false;
 let pauseMenu;
+let audioManager;
 const mouseSensitivity = 0.002;
 
 let yaw = 0;
@@ -35,7 +37,6 @@ async function init() {
 
   const titleMenu = new TitleMenu(sceneManager);
   sceneManager.setScene(null);
-
 
   // Set up camera hierarchy for rotation
   yawObject.add(pitchObject);
@@ -70,6 +71,11 @@ async function init() {
 
   // Play the cutscene before the game starts
   await cutsceneManager.play(tutorialCutscene);
+
+  // Initialize and start background music
+  audioManager = new AudioManager();
+  await audioManager.loadBackgroundMusic('/assets/audio/horror-scary-dark-music-413504.mp3');
+  await audioManager.playMusic(3000); // 3 second fade in
 
   // Create lobby scene (includes tutorial and boss)
   lobbyScene = new LobbyScene(renderer, camera);
@@ -280,10 +286,6 @@ async function init() {
     yawObject.position.copy(lobbyScene.player.ghost.position);
 
     // Update lobby scene (tutorial, boss, etc.) - pass current yaw and pitch
-    //lobbyScene.camera.rotation.y = yaw;
-    //lobbyScene.camera.rotation.x = pitch;
-    //lobbyScene.update();
-    // FIXED: Pass the actual yaw and pitch values to the scene
     lobbyScene.updateWithCameraRotation(yaw, pitch);
   }
 
@@ -398,6 +400,18 @@ async function init() {
         )}), radius: ${cached.radius.toFixed(2)}`
       );
     });
+  };
+
+  // Music debug helpers
+  window.muteMusic = () => audioManager.toggleMute();
+  window.setVolume = (vol) => audioManager.setVolume(vol);
+  window.musicStatus = () => {
+    console.log('=== 🎵 MUSIC STATUS ===');
+    console.log('Playing:', audioManager.isPlaying());
+    console.log('Muted:', audioManager.isMuted);
+    console.log('Volume:', (audioManager.volume * 100) + '%');
+    console.log('Current Time:', audioManager.getCurrentTime().toFixed(2) + 's');
+    console.log('Duration:', audioManager.getDuration().toFixed(2) + 's');
   };
 }
 

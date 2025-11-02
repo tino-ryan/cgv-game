@@ -1,12 +1,14 @@
+// cutsceneManager.js
+import AudioManager from "./audiomanager.js";
+
 export default class CutsceneManager {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
-
-    // 🧹 Clear any leftover elements from previous runs
-    this.container.innerHTML = "";
+    this.container.innerHTML = ""; // Clear previous
 
     this.textElement = document.createElement("div");
     this.imageElement = document.createElement("img");
+    this.audioManager = new AudioManager(); // Dedicated for cutscene SFX
 
     Object.assign(this.imageElement.style, {
       width: "80%",
@@ -20,6 +22,7 @@ export default class CutsceneManager {
       fontSize: "24px",
       lineHeight: "1.5",
       color: "white",
+      fontFamily: "Arial, sans-serif",
     });
 
     this.container.appendChild(this.imageElement);
@@ -27,7 +30,6 @@ export default class CutsceneManager {
   }
 
   async play(scenes) {
-    // 🧹 Reset before showing a new cutscene
     this.imageElement.src = "";
     this.textElement.textContent = "";
     this.container.style.display = "flex";
@@ -40,27 +42,31 @@ export default class CutsceneManager {
       await this.showScene(scene);
     }
 
-    // 🧹 Hide and clear when finished
     this.container.style.display = "none";
     this.imageElement.src = "";
     this.textElement.textContent = "";
   }
 
-  async showScene({ image, text }) {
-    // 🧹 Reset between scenes
+  async showScene({ image, text, sfx, sfxDuration }) {
     this.imageElement.src = image || "";
     this.textElement.textContent = "";
 
-    for (let i = 0; i < text.length; i++) {
-      this.textElement.textContent = text.substring(0, i + 1);
-      await new Promise((r) => setTimeout(r, 35)); // typing speed
+    // === PLAY GIBBERISH VOICE ===
+    if (sfx && sfxDuration) {
+      this.audioManager.playOneShotWithPitch(sfx, sfxDuration, 0.8, true);
     }
 
-    // Wait for a click to continue
-    await new Promise((r) => {
+    // Typewriter effect
+    for (let i = 0; i < text.length; i++) {
+      this.textElement.textContent = text.substring(0, i + 1);
+      await new Promise(r => setTimeout(r, 35));
+    }
+
+    // Wait for click to continue
+    await new Promise(resolve => {
       const next = () => {
         window.removeEventListener("click", next);
-        r();
+        resolve();
       };
       window.addEventListener("click", next);
     });
