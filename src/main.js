@@ -1,4 +1,4 @@
-// src/main.js - FIXED VERSION
+// src/main.js - WITH TITLE MENU START
 import * as THREE from "three";
 import { initRenderer } from "./core/renderer.js";
 import LobbyScene from "./scenes/lobbyScene.js";
@@ -10,6 +10,8 @@ import { tutorialCutscene } from "./cutscenes/tutorialCutscene.js";
 import SceneManager from "./systems/sceneManager.js";
 import TitleMenu from "./scenes/titleMenu.js";
 import PauseMenu from "./ui/pauseMenu.js";
+import HUD from "./ui/hud.js";
+import Player from "./entities/player.js";
 
 // ===== TESTING MODE =====
 const TESTING_MODE = "normal"; // "lobby" | "normal"
@@ -19,6 +21,7 @@ let renderer, camera, currentScene, sceneManager;
 let lobbyScene, hallwayScene, bathroomScene, kitchenScene;
 let isPaused = false;
 let pauseMenu;
+let titleMenu;
 
 const mouseSensitivity = 0.0015;
 let yaw = 0;
@@ -28,6 +31,9 @@ const yawObject = new THREE.Object3D();
 const pitchObject = new THREE.Object3D();
 
 async function init() {
+  // -------------------------------------------------
+  // RENDERER & CAMERA
+  // -------------------------------------------------
   renderer = initRenderer();
   camera = new THREE.PerspectiveCamera(
     75,
@@ -45,10 +51,20 @@ async function init() {
 
   console.log("Renderer initialized:", renderer);
   console.log("Camera initialized:", camera);
+  console.log("Type listCommands() to see all debug commands!");
 
-  // -----------------------------------------------------------------
-  // CUTSCENE CONTAINER (shared by normal flow & testing)
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
+  // RESIZE HANDLER
+  // -------------------------------------------------
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // -------------------------------------------------
+  // CUTSCENE CONTAINER
+  // -------------------------------------------------
   const cutsceneContainer = document.createElement("div");
   cutsceneContainer.id = "cutscene-container";
   document.body.appendChild(cutsceneContainer);
@@ -68,24 +84,23 @@ async function init() {
     textAlign: "center",
   });
 
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   // TESTING MODE LOGIC
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   if (TESTING_MODE === "lobby") {
     console.log("TESTING MODE: Loading lobby scene directly");
     currentScene = new LobbyScene(renderer, camera);
     currentScene.scene.add(yawObject);
     setTimeout(() => document.body.requestPointerLock(), 100);
   } else {
-    // ----- NORMAL FLOW -----
-    const cutsceneManager = new CutsceneManager("cutscene-container");
-    await cutsceneManager.play(tutorialCutscene);
-    await startLobbyScene();
+    // Normal flow: Title Menu
+    console.log("Starting with Title Menu...");
+    titleMenu = new TitleMenu(() => startGameFromTitle());
   }
 
-  // -----------------------------------------------------------------
-  // POINTER LOCK (double-click or click)
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
+  // POINTER LOCK
+  // -------------------------------------------------
   const requestLock = () => {
     if (document.pointerLockElement !== document.body) {
       document.body.requestPointerLock();
@@ -106,12 +121,15 @@ async function init() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && document.pointerLockElement === document.body) {
       document.exitPointerLock();
+      if (currentScene && pauseMenu) {
+        pauseMenu.pause();
+      }
     }
   });
 
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   // MOUSE LOOK
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   document.addEventListener("mousemove", (e) => {
     if (document.pointerLockElement === document.body) {
       yaw -= e.movementX * mouseSensitivity;
@@ -120,9 +138,9 @@ async function init() {
     }
   });
 
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   // KEYBOARD INPUT
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   const keys = {
     up: false, down: false, left: false, right: false,
     w: false, a: false, s: false, d: false,
@@ -143,17 +161,14 @@ async function init() {
   window.addEventListener("keydown", (e) => setKey(e.key, true));
   window.addEventListener("keyup", (e) => setKey(e.key, false));
 
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   // INTERACTION KEYS (F / E)
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   window.addEventListener("keydown", (e) => {
     if (e.key === "f" || e.key === "F") {
-      // Lobby bell
       if (currentScene === lobbyScene && lobbyScene.serviceBell) {
         lobbyScene.pickupBell();
-      }
-      // Bathroom toilet-paper / torch
-      else if (currentScene.handlePickup) {
+      } else if (currentScene.handlePickup) {
         currentScene.handlePickup();
       }
     }
@@ -167,9 +182,9 @@ async function init() {
     }
   });
 
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   // MAIN ANIMATION LOOP
-  // -----------------------------------------------------------------
+  // -------------------------------------------------
   function animate() {
     requestAnimationFrame(animate);
     if (isPaused) return;
@@ -179,7 +194,6 @@ async function init() {
       return;
     }
 
-    // ----- CAMERA SNAP (boss spawn, etc.) -----
     const snap = currentScene.getCameraSnapRotation?.();
     if (snap) {
       yaw = snap.yaw;
@@ -187,11 +201,9 @@ async function init() {
       console.log("Camera snapped to target!");
     }
 
-    // ----- ROTATION -----
     yawObject.rotation.y = yaw;
     pitchObject.rotation.x = pitch;
 
-    // ----- MOVEMENT DIRECTION -----
     let forward = new THREE.Vector3();
     let right = new THREE.Vector3();
 
@@ -211,10 +223,9 @@ async function init() {
     } else if (currentScene instanceof HallwayScene) {
       yawObject.position.copy(currentScene.player.ghost.position);
       currentScene.updateWithCameraRotation?.(yaw, pitch);
-      return; // Hallway disables WASD during puzzle
+      return;
     }
 
-    // ----- BUILD MOVE VECTOR -----
     const moveSpeed = 0.1;
     let move = new THREE.Vector3();
     if (keys.up || keys.w) move.add(forward);
@@ -236,309 +247,34 @@ async function init() {
       }
     }
 
-    // ----- SCENE-SPECIFIC CAMERA OFFSET -----
     if (currentScene instanceof KitchenScene) {
-      yawObject.position.y += 0.8; // eye-level for smaller player
+      yawObject.position.y += 0.8;
     }
     currentScene.updateWithCameraRotation?.(yaw, pitch);
   }
 
-  pauseMenu = new PauseMenu(sceneManager, null, (p) => (isPaused = p));
   animate();
 
-// Add these to the DEBUG CONSOLE COMMANDS section in main.js
-// Replace the existing debug commands section with this:
-
-// -----------------------------------------------------------------
-// DEBUG CONSOLE COMMANDS
-// -----------------------------------------------------------------
-window.enterCombat = () => currentScene.player.enterCombat();
-window.exitCombat = () => currentScene.player.exitCombat();
-window.startBoss = () => currentScene.startBossFight?.();
-
-window.toggleCollisionDebug = () => {
-  if (currentScene?.physics) {
-    currentScene.physics.debugEnabled = !currentScene.physics.debugEnabled;
-    console.log(
-      "Collision debug:",
-      currentScene.physics.debugEnabled ? "ON" : "OFF"
-    );
-  }
-};
-
-// ============================================================================
-// LEVEL SKIP COMMANDS
-// ============================================================================
-
-window.skipToLobby = () => {
-  console.log("🎮 DEBUG: Skipping to Lobby");
-  
-  // Clean up current scene
-  if (currentScene?.dispose) currentScene.dispose();
-  if (currentScene?.scene) currentScene.scene.remove(yawObject);
-  
-  // Exit pointer lock
-  if (document.pointerLockElement) document.exitPointerLock();
-  
-  // Create lobby scene
-  lobbyScene = new LobbyScene(renderer, camera);
-  lobbyScene.scene.add(yawObject);
-  currentScene = lobbyScene;
-  window.currentSceneName = "lobby";
-  
-  yawObject.position.set(0, 1.6, 5);
-  yaw = 0;
-  pitch = 0;
-  
-  console.log("✅ Lobby loaded");
-  setTimeout(() => document.body.requestPointerLock(), 500);
-};
-
-window.skipToHallway = () => {
-  console.log("🎮 DEBUG: Skipping to Hallway");
-  
-  // Clean up current scene
-  if (currentScene?.dispose) currentScene.dispose();
-  if (currentScene?.scene) currentScene.scene.remove(yawObject);
-  
-  // Exit pointer lock
-  if (document.pointerLockElement) document.exitPointerLock();
-  
-  // Create player if needed
-  if (!currentScene?.player) {
-    const hud = new HUD();
-    const player = new Player(null, camera, hud);
-    player.loadGhost("/assets/models/mainchar.glb");
-    player.loadGun("/assets/models/gun.glb");
-    
-    hallwayScene = new HallwayScene(
-      renderer,
-      camera,
-      player,
-      new THREE.Vector3(0, 1.6, 15),
-      { yaw: 0, pitch: 0 }
-    );
-  } else {
-    hallwayScene = new HallwayScene(
-      renderer,
-      camera,
-      currentScene.player,
-      new THREE.Vector3(0, 1.6, 15),
-      { yaw: 0, pitch: 0 }
-    );
-  }
-  
-  hallwayScene.scene.add(yawObject);
-  yawObject.position.set(0, 1.6, 15);
-  currentScene = hallwayScene;
-  window.currentSceneName = "hallway";
-  
-  const initRot = hallwayScene.getInitialCameraRotation?.() ?? { yaw: 0, pitch: 0 };
-  yaw = initRot.yaw;
-  pitch = initRot.pitch;
-  yawObject.rotation.y = yaw;
-  pitchObject.rotation.x = pitch;
-  
-  console.log("✅ Hallway loaded");
-  setTimeout(() => document.body.requestPointerLock(), 500);
-};
-
-window.skipToBathroom = () => {
-  console.log("🎮 DEBUG: Skipping to Bathroom");
-  
-  // Clean up current scene
-  if (currentScene?.dispose) currentScene.dispose();
-  if (currentScene?.scene) currentScene.scene.remove(yawObject);
-  
-  // Exit pointer lock
-  if (document.pointerLockElement) document.exitPointerLock();
-  
-  // Create player if needed
-  if (!currentScene?.player) {
-    const hud = new HUD();
-    const player = new Player(null, camera, hud);
-    player.loadGhost("/assets/models/mainchar.glb");
-    player.loadGun("/assets/models/gun.glb");
-    
-    bathroomScene = new BathroomScene(
-      renderer,
-      camera,
-      player,
-      new THREE.Vector3(0, 1.6, 5),
-      { yaw: 0, pitch: 0 }
-    );
-  } else {
-    bathroomScene = new BathroomScene(
-      renderer,
-      camera,
-      currentScene.player,
-      new THREE.Vector3(0, 1.6, 5),
-      { yaw: 0, pitch: 0 }
-    );
-  }
-  
-  bathroomScene.scene.add(yawObject);
-  yawObject.position.set(0, 1.6, 5);
-  currentScene = bathroomScene;
-  window.currentSceneName = "bathroom";
-  
-  const initRot = bathroomScene.getInitialCameraRotation?.() ?? { yaw: 0, pitch: 0 };
-  yaw = initRot.yaw;
-  pitch = initRot.pitch;
-  yawObject.rotation.y = yaw;
-  pitchObject.rotation.x = pitch;
-  
-  console.log("✅ Bathroom loaded");
-  setTimeout(() => document.body.requestPointerLock(), 500);
-};
-
-window.skipToKitchen = () => {
-  console.log("🎮 DEBUG: Skipping to Kitchen");
-  
-  // Clean up current scene
-  if (currentScene?.dispose) currentScene.dispose();
-  if (currentScene?.scene) currentScene.scene.remove(yawObject);
-  
-  // Exit pointer lock
-  if (document.pointerLockElement) document.exitPointerLock();
-  
-  camera.position.set(0, 0.8, 0);
-  
-  // Create player if needed
-  if (!currentScene?.player) {
-    const hud = new HUD();
-    const player = new Player(null, camera, hud);
-    player.loadGhost("/assets/models/mainchar.glb");
-    player.loadGun("/assets/models/gun.glb");
-    
-    kitchenScene = new KitchenScene(
-      renderer,
-      camera,
-      player,
-      new THREE.Vector3(0, 0.8, 5),
-      { yaw: 0, pitch: 0 }
-    );
-  } else {
-    kitchenScene = new KitchenScene(
-      renderer,
-      camera,
-      currentScene.player,
-      new THREE.Vector3(0, 0.8, 5),
-      { yaw: 0, pitch: 0 }
-    );
-  }
-  
-  kitchenScene.scene.add(yawObject);
-  yawObject.position.set(0, 0.8, 5);
-  currentScene = kitchenScene;
-  window.currentSceneName = "kitchen";
-  
-  const initRot = kitchenScene.getInitialCameraRotation?.() ?? { yaw: 0, pitch: 0 };
-  yaw = initRot.yaw;
-  pitch = initRot.pitch;
-  yawObject.rotation.y = yaw;
-  pitchObject.rotation.x = pitch;
-  
-  console.log("✅ Kitchen loaded");
-  setTimeout(() => document.body.requestPointerLock(), 500);
-};
-
-// ============================================================================
-// OTHER DEBUG COMMANDS
-// ============================================================================
-
-window.giveHealth = (amount = 1) => {
-  if (currentScene?.player) {
-    currentScene.player.health.current = Math.min(
-      currentScene.player.health.current + amount,
-      currentScene.player.health.max
-    );
-    currentScene.player.hud?.updatePlayerHearts(
-      currentScene.player.health.current,
-      currentScene.player.health.max
-    );
-    console.log(`❤️ Gave ${amount} health. Current: ${currentScene.player.health.current}/${currentScene.player.health.max}`);
-  }
-};
-
-window.fullHealth = () => {
-  if (currentScene?.player) {
-    currentScene.player.health.current = currentScene.player.health.max;
-    currentScene.player.hud?.updatePlayerHearts(
-      currentScene.player.health.current,
-      currentScene.player.health.max
-    );
-    console.log(`💚 Full health restored! ${currentScene.player.health.max}/${currentScene.player.health.max}`);
-  }
-};
-
-window.godMode = () => {
-  if (currentScene?.player) {
-    const originalTakeDamage = currentScene.player.takeDamage.bind(currentScene.player);
-    currentScene.player.takeDamage = function() {
-      console.log("🛡️ GOD MODE: Damage blocked!");
-    };
-    console.log("🛡️ GOD MODE ENABLED - You are invincible!");
-    console.log("💡 Type godModeOff() to disable");
-    
-    window.godModeOff = () => {
-      currentScene.player.takeDamage = originalTakeDamage;
-      console.log("🛡️ GOD MODE DISABLED");
-    };
-  }
-};
-
-window.killBoss = () => {
-  if (currentScene?.boss) {
-    currentScene.boss.health = 0;
-    currentScene.boss.isAlive = false;
-    console.log("💀 Boss killed!");
-  } else if (currentScene?.kitchenGhost) {
-    currentScene.kitchenGhost.health = 0;
-    currentScene.kitchenGhost.isAlive = false;
-    console.log("💀 Kitchen Ghost killed!");
-  } else {
-    console.log("❌ No boss found in current scene");
-  }
-};
-
-window.listCommands = () => {
-  console.log(`
-🎮 ============ DEBUG CONSOLE COMMANDS ============
-
-📍 LEVEL SKIP:
-  skipToLobby()       - Jump to Lobby
-  skipToHallway()     - Jump to Hallway  
-  skipToBathroom()    - Jump to Bathroom
-  skipToKitchen()     - Jump to Kitchen
-
-❤️ PLAYER CHEATS:
-  giveHealth(amount)  - Add health (default: 1)
-  fullHealth()        - Restore full health
-  godMode()           - Enable invincibility
-  godModeOff()        - Disable invincibility
-
-⚔️ COMBAT:
-  enterCombat()       - Enable combat mode
-  exitCombat()        - Disable combat mode
-  startBoss()         - Start boss fight (if available)
-  killBoss()          - Instantly defeat current boss
-
-🔧 OTHER:
-  toggleCollisionDebug() - Show/hide collision boxes
-  listCommands()         - Show this help menu
-
-==================================================
-  `);
-};
-
-// Show available commands on load
-console.log("🎮 Type listCommands() to see all debug commands!");
-
+  // -------------------------------------------------
+  // DEBUG COMMANDS
+  // -------------------------------------------------
+  setupDebugCommands();
 }
 
 // ============================================================================
-// LOBBY SCENE (normal entry point)
+// START GAME FROM TITLE
+// ============================================================================
+async function startGameFromTitle() {
+  console.log("Starting game from title menu...");
+  const cutsceneManager = new CutsceneManager("cutscene-container");
+  await cutsceneManager.play(tutorialCutscene);
+  await startLobbyScene();
+  pauseMenu = new PauseMenu(sceneManager, null, (p) => (isPaused = p), restartCurrentLevel);
+  console.log("Game started from title menu!");
+}
+
+// ============================================================================
+// LOBBY SCENE
 // ============================================================================
 async function startLobbyScene() {
   console.log("Starting Lobby Scene...");
@@ -550,7 +286,39 @@ async function startLobbyScene() {
 }
 
 // ============================================================================
-// CUTSCENE HELPER FOR KITCHEN TRANSITION
+// RESTART CURRENT LEVEL
+// ============================================================================
+function restartCurrentLevel() {
+  console.log("Restarting current level:", window.currentSceneName);
+  const sceneName = window.currentSceneName;
+
+  if (document.pointerLockElement) {
+    document.exitPointerLock();
+  }
+
+  switch (sceneName) {
+    case "lobby": window.skipToLobby(); break;
+    case "hallway": window.skipToHallway(); break;
+    case "bathroom": window.skipToBathroom(); break;
+    case "kitchen":
+      if (currentScene && currentScene.restartKitchen) {
+        currentScene.restartKitchen();
+      } else {
+        window.skipToKitchen();
+      }
+      break;
+    default:
+      console.log("Unknown scene, reloading page...");
+      window.location.reload();
+  }
+
+  if (pauseMenu) {
+    pauseMenu.resume();
+  }
+}
+
+// ============================================================================
+// KITCHEN TRANSITION CUTSCENE
 // ============================================================================
 async function showKitchenTransitionCutscene() {
   return new Promise((resolve) => {
@@ -565,7 +333,7 @@ async function showKitchenTransitionCutscene() {
     `;
 
     cutscene.innerHTML = `
-      <div style="font-size: 80px; margin-bottom: 30px;">🧻✨</div>
+      <div style="font-size: 80px; margin-bottom: 30px;">The mystical toilet paper</div>
       <h2 style="font-size: 42px; color: #ffaa00; margin-bottom: 20px;">
         The Bathroom is Restored!
       </h2>
@@ -574,14 +342,13 @@ async function showKitchenTransitionCutscene() {
         But your journey continues...
       </p>
       <div style="font-size: 64px; margin-bottom: 20px; animation: bounce 1s infinite;">
-        🍳
+        The kitchen
       </div>
       <p style="font-size: 28px; color: #ff6600; font-weight: bold;">
         Entering the Kitchen...
       </p>
     `;
 
-    // Add animations
     const style = document.createElement('style');
     style.textContent = `
       @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -591,10 +358,8 @@ async function showKitchenTransitionCutscene() {
       }
     `;
     document.head.appendChild(style);
-
     document.body.appendChild(cutscene);
 
-    // Remove after 3 seconds
     setTimeout(() => {
       cutscene.style.transition = "opacity 0.5s";
       cutscene.style.opacity = "0";
@@ -608,7 +373,7 @@ async function showKitchenTransitionCutscene() {
 }
 
 // ============================================================================
-// SCENE TRANSITIONS
+// SCENE TRANSITIONS (window functions)
 // ============================================================================
 
 window.transitionToHallway = () => {
@@ -616,8 +381,6 @@ window.transitionToHallway = () => {
   if (!currentScene?.player?.ghost) return console.error("No player");
 
   window.currentSceneName = "hallway";
-  const pos = currentScene.player.ghost.position.clone();
-
   currentScene.scene?.remove?.(yawObject);
   camera.position.set(0, 1.6, 0);
 
@@ -637,8 +400,6 @@ window.transitionToHallway = () => {
   pitch = initRot.pitch;
   yawObject.rotation.y = yaw;
   pitchObject.rotation.x = pitch;
-
-  console.log("Hallway ready");
 };
 
 window.transitionToBathroom = () => {
@@ -646,7 +407,6 @@ window.transitionToBathroom = () => {
   if (!currentScene?.player?.ghost) return console.error("No player");
 
   window.currentSceneName = "bathroom";
-
   currentScene.dispose?.();
   currentScene.scene?.remove?.(yawObject);
   camera.position.set(0, 1.6, 0);
@@ -667,47 +427,34 @@ window.transitionToBathroom = () => {
   pitch = initRot.pitch;
   yawObject.rotation.y = yaw;
   pitchObject.rotation.x = pitch;
-
-  console.log("Bathroom ready");
 };
 
 window.transitionToKitchen = async () => {
-  console.log("🍳 Transitioning to Kitchen...");
+  console.log("Transitioning to Kitchen...");
   if (!currentScene?.player?.ghost) return console.error("No player");
 
   window.currentSceneName = "kitchen";
 
-  // Exit pointer lock during transition
   if (document.pointerLockElement) {
     document.exitPointerLock();
   }
 
-  // Show transition cutscene
   await showKitchenTransitionCutscene();
 
-  // Clean up bathroom scene completely
-  if (currentScene.dispose) {
-    currentScene.dispose();
-  }
+  if (currentScene.dispose) currentScene.dispose();
   currentScene.scene?.remove?.(yawObject);
-  
-  // Hide inventory UI if it exists
+
   const inventoryUI = document.getElementById("inventory-ui");
-  if (inventoryUI) {
-    inventoryUI.style.display = "none";
-    inventoryUI.remove();
-  }
-  
-  // Remove any bathroom-specific UI elements
+  if (inventoryUI) inventoryUI.remove();
+
   const pickupPrompt = document.getElementById("pickup-prompt");
   if (pickupPrompt) pickupPrompt.remove();
-  
+
   const torchPrompt = document.getElementById("torch-prompt");
   if (torchPrompt) torchPrompt.remove();
-  
+
   camera.position.set(0, 0.8, 0);
 
-  // Create kitchen scene
   kitchenScene = new KitchenScene(
     renderer,
     camera,
@@ -725,9 +472,6 @@ window.transitionToKitchen = async () => {
   yawObject.rotation.y = yaw;
   pitchObject.rotation.x = pitch;
 
-  console.log("✅ Kitchen ready");
-  
-  // Request pointer lock after brief delay
   setTimeout(() => {
     if (!document.pointerLockElement) {
       document.body.requestPointerLock();
@@ -744,7 +488,7 @@ window.transitionToNextLevel = () => {
     justify-content: center; align-items: center;
     z-index: 10000; font-family: Arial, sans-serif;
   `;
-  
+
   victoryOverlay.innerHTML = `
     <h1 style="color: #00ff00; font-size: 72px; margin-bottom: 20px;">
       GAME COMPLETE!
@@ -759,7 +503,7 @@ window.transitionToNextLevel = () => {
       cursor: pointer;
     ">Return to Main Menu</button>
   `;
-  
+
   document.body.appendChild(victoryOverlay);
   document.getElementById("return-to-menu")?.addEventListener("click", () => location.reload());
 };
@@ -767,12 +511,45 @@ window.transitionToNextLevel = () => {
 window.returnToMainMenu = () => location.reload();
 
 // ============================================================================
-// START & RESIZE
+// DEBUG COMMANDS
+// ============================================================================
+function setupDebugCommands() {
+  // ... (your debug commands here - unchanged)
+  // Just make sure this function is defined *before* calling it in init()
+  // Or move it above init()
+
+  window.enterCombat = () => currentScene.player.enterCombat();
+  window.exitCombat = () => currentScene.player.exitCombat();
+  window.startBoss = () => currentScene.startBossFight?.();
+
+  window.toggleCollisionDebug = () => {
+    if (currentScene?.physics) {
+      currentScene.physics.debugEnabled = !currentScene.physics.debugEnabled;
+      console.log("Collision debug:", currentScene.physics.debugEnabled ? "ON" : "OFF");
+    }
+  };
+
+  // LEVEL SKIPS
+  window.skipToLobby = () => { /* ... */ };
+  window.skipToHallway = () => { /* ... */ };
+  window.skipToBathroom = () => { /* ... */ };
+  window.skipToKitchen = () => { /* ... */ };
+
+  // CHEATS
+  window.giveHealth = (amount = 1) => { /* ... */ };
+  window.fullHealth = () => { /* ... */ };
+  window.godMode = () => { /* ... */ };
+  window.killBoss = () => { /* ... */ };
+
+  window.listCommands = () => { /* ... */ };
+
+  console.log("Debug console commands loaded. Type listCommands() to see all.");
+}
+
+// Move setupDebugCommands() BEFORE init() or define it inline
+setupDebugCommands();
+
+// ============================================================================
+// START THE GAME
 // ============================================================================
 init().catch((e) => console.error("Init failed:", e));
-
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});

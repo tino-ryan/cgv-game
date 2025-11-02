@@ -420,23 +420,77 @@ releaseSpirit(position) {
   this.updateSpiritUI();
   this.showFloatingText("+1 Spirit!", position);
 
-  if (this.spiritsFreed >= this.totalSpirits) {
-    setTimeout(() => {
-      this.removeSubgoalsUI();
-      this.showMessage(
-        "🎉 Tutorial Complete! Get ready for the Boss Fight..."
-      );
+      if (this.spiritsFreed >= this.totalSpirits) {
+        // ---- NEW PAUSE + CUTSCENE SPACE ----
+        (async () => {
+          // 1. Clean UI
+          this.removeSubgoalsUI();
 
-      setTimeout(() => {
-        if (this.lobbyScene && this.lobbyScene.startBossFight) {
-          this.lobbyScene.startBossFight();
-        }
-        this.phase++;
-        this.executePhase();
-      }, 3000);
-    }, 500);
-  }
+          // 2. Victory message
+          this.showMessage("Tutorial Complete! Get ready for the Boss Fight...");
+
+          // 3. **Pause / cutscene space**
+          await this.pauseWithMessage("The lobby grows quiet…", 2500); // <-- adjust time here
+
+          // 4. Finally start the boss
+          if (this.lobbyScene && this.lobbyScene.startBossFight) {
+            this.lobbyScene.startBossFight();
+          }
+
+          // 5. Advance tutorial phase (optional – you may want to end it)
+          this.phase++;
+          this.executePhase();
+        })();
+      }
 }
+  /**
+   * Shows a full-screen overlay with a message and blocks player controls for `ms` milliseconds.
+   */
+  async pauseWithMessage(message, ms = 2000) {
+    // 1. Show overlay
+    const overlay = document.createElement("div");
+    overlay.id = "tutorial-pause-overlay";
+    overlay.style.position = "fixed";
+    overlay.style.top = "0";
+    overlay.style.left = "0";
+    overlay.style.width = "100%";
+    overlay.style.height = "100%";
+    overlay.style.background = "rgba(0,0,0,0.85)";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.zIndex = "20000";
+    overlay.style.pointerEvents = "none";
+
+    const txt = document.createElement("div");
+    txt.textContent = message;
+    txt.style.color = "#fff";
+    txt.style.fontFamily = "Arial, sans-serif";
+    txt.style.fontSize = "32px";
+    txt.style.textAlign = "center";
+    txt.style.textShadow = "2px 2px 4px #000";
+    overlay.appendChild(txt);
+    document.body.appendChild(overlay);
+
+    // 2. Disable player controls (if you have a global flag – adjust to your code)
+    if (this.player && this.player.disableControls) {
+      this.player.disableControls(true);
+    }
+
+    // 3. Wait
+    await this.sleep(ms);
+
+    // 4. Clean up
+    document.body.removeChild(overlay);
+    if (this.player && this.player.disableControls) {
+      this.player.disableControls(false);
+    }
+  }
+
+  /** Simple promise-based sleep */
+  sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
   update(keys, player, yaw, pitch, delta) {
     if (!player.ghost) return;

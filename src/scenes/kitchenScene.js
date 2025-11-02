@@ -6,6 +6,10 @@ import HUD from "../ui/hud.js";
 import PhysicsSystem from "../systems/physics.js";
 import Inventory from "../systems/inventory.js";
 import KitchenGhost from "../entities/kitchenGhost.js";
+import { level3start } from "../cutscenes/level3start.js";
+import { level3PreBattle } from "../cutscenes/level3PreBattle.js";
+import { level3postBattle } from "../cutscenes/level3postBattle.js";
+import CutsceneManager from "../ui/cutsceneManager.js";
 
 export default class KitchenScene {
 // Replace the constructor in kitchenScene.js with this:
@@ -16,30 +20,26 @@ constructor(renderer, camera, player, playerPosition, cameraRotation) {
   this.scene = new THREE.Scene();
   this.clock = new THREE.Clock();
 
-if (player) {
-  this.player = player;
-  // Scale down the player model (safely check if ghost exists)
-  if (this.player.ghost) {
-    this.player.ghost.scale.set(0.7, 0.7, 0.7);
-    this.player.ghost.position.copy(playerPosition);
-    this.player.ghost.position.y = 0.8;
-  }
-} else {
-  this.hud = new HUD();
-  this.player = new Player(this.scene, this.camera, this.hud);
-  // Scale down the player model after it loads
-  this.player.loadGhost("/assets/models/mainchar.glb").then(() => {
+  if (player) {
+    this.player = player;
     if (this.player.ghost) {
       this.player.ghost.scale.set(0.7, 0.7, 0.7);
+      this.player.ghost.position.copy(playerPosition);
       this.player.ghost.position.y = 0.8;
     }
-  });
-  this.player.loadGun("/assets/models/gun.glb");
-}
+  } else {
+    this.hud = new HUD();
+    this.player = new Player(this.scene, this.camera, this.hud);
+    this.player.loadGhost("/assets/models/mainchar.glb").then(() => {
+      if (this.player.ghost) {
+        this.player.ghost.scale.set(0.7, 0.7, 0.7);
+        this.player.ghost.position.y = 0.8;
+      }
+    });
+    this.player.loadGun("/assets/models/gun.glb");
+  }
 
-  // CRITICAL: Expose player through scene.userData for main.js
   this.scene.userData.player = this.player;
-
 
   this.physics = new PhysicsSystem(this.scene);
   this.inventory = new Inventory(null);
@@ -47,17 +47,9 @@ if (player) {
 
   this.initialCameraRotation = cameraRotation || { yaw: 0, pitch: 0 };
 
-  // Camera/Player boundaries (adjusted for 2x scaled kitchen)
   this.boundaries = {
-    minX: -9,
-    maxX: 9,
-    minZ: -6.5,
-    maxZ: 6.5,
-    minY: 0.5,
-    maxY: 5
+    minX: -9, maxX: 9, minZ: -6.5, maxZ: 6.5, minY: 0.5, maxY: 5
   };
-
-  this.initialCameraRotation = cameraRotation || { yaw: 0, pitch: 0 };
 
   this.kitchenModel = null;
   this.interactiveObjects = [];
@@ -83,14 +75,28 @@ if (player) {
   this.smokeParticles = [];
   this.steamParticles = [];
 
+  // ————————————————————————————————————————————————————————————————
+  // CUTSCENE MANAGER
+  // ————————————————————————————————————————————————————————————————
+  this.cutscene = new CutsceneManager("cutscene-container");
+
   this.setupLighting();
-  this.loadKitchenEnvironment().then(() => {
-    this.createInteractiveObjects();
+
+  // ————————————————————————————————————————————————————————————————
+  // 1. INTRO CUTSCENE — runs while models load
+  // ————————————————————————————————————————————————————————————————
+  this.cutscene.play(level3start).then(() => {
+    this.loadKitchenEnvironment().then(() => {
+      this.createInteractiveObjects();
+    });
   });
+
   this.createAmbientEffects();
   this.setupMouseInteraction();
   this.createCrosshair();
-  this.startIntroPhase();
+
+  // Start intro phase only after cutscene ends
+  setTimeout(() => this.startIntroPhase(), 600);
 
   window.kitchenScene = this;
 }
@@ -1091,21 +1097,24 @@ handleObjectSelection() {
   // ————————————————————————————————————————————————————————————————
   // BOSS FIGHT — 100% CONSISTENT WITH LOBBY
   // ————————————————————————————————————————————————————————————————
-  startBossPhase() {
-    this.currentPhase = "boss";
-    this.showMessage("All possessed objects destroyed!");
-    setTimeout(() => {
-      this.showMessage("You sense an evil presence from the oven...");
-      this.ovenLight.intensity = 3.0;
-      this.ovenLight.color.setHex(0xff0000);
-      this.createRedMist();
-      setTimeout(() => {
-        this.showMessage("THE KITCHEN GHOST EMERGES!");
-        this.spawnKitchenGhost();
-      }, 3000);
-    }, 2000);
-  }
+startBossPhase() {
+  this.currentPhase = "boss";
+  this.showMessage("All possessed objects destroyed!");
 
+  // ————————————————————————————————————————————————————————————————
+  // 2. PRE-BATTLE CUTSCENE — runs while boss loads
+  // ————————————————————————————————————————————————————————————————
+  this.cutscene.play(level3PreBattle).then(() => {
+    this.showMessage("You sense an evil presence from the oven...");
+    this.ovenLight.intensity = 3.0;
+    this.ovenLight.color.setHex(0xff0000);
+    this.createRedMist();
+    setTimeout(() => {
+      this.showMessage("THE KITCHEN GHOST EMERGES!");
+      this.spawnKitchenGhost();
+    }, 3000);
+  });
+}
   createRedMist() {
     for (let i = 0; i < 30; i++) {
       const mistGeo = new THREE.SphereGeometry(0.4, 8, 8);
@@ -1175,7 +1184,7 @@ handleBossDefeat() {
   if (this.kitchenGhost.defeatedHandled) return;
   this.kitchenGhost.defeatedHandled = true;
 
-  console.log("🎉 handleBossDefeat called!");
+  console.log("handleBossDefeat called!");
 
   this.currentPhase = "complete";
   this.showMessage("VICTORY! The Kitchen Ghost has been defeated!");
@@ -1192,10 +1201,13 @@ handleBossDefeat() {
   this.ovenLight.intensity = 0.8;
   this.ovenLight.color.setHex(0xff4400);
 
-  setTimeout(() => {
+  // ————————————————————————————————————————————————————————————————
+  // 3. VICTORY CUTSCENE — runs before reward
+  // ————————————————————————————————————————————————————————————————
+  this.cutscene.play(level3postBattle).then(() => {
     this.showMessage("The Chef Ghost appears, freed from possession!");
     this.showChefGhostCutscene();
-  }, 2000);
+  });
 }
 
   showChefGhostCutscene() {
