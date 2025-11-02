@@ -8,6 +8,10 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { createDustParticles, updateDustParticles } from "../core/filters.js";
 import CutsceneManager from "../systems/cutsceneManager.js";
 
+import { level2start } from "../cutscenes/level2start.js";
+import { level2preBattle } from "../cutscenes/level2preBattle.js";
+import { level2postBattle } from "../cutscenes/level2postBattle.js";
+
 export default class BathroomScene {
   constructor(renderer, camera) {
     this.renderer = renderer;
@@ -140,42 +144,24 @@ export default class BathroomScene {
   }
 
   async playIntroCutscene() {
-    const intro = [
-      {
-        image: "/assets/cutscenes/scene1.jpg",
-        text: "text",
-      },
-      {
-        image: "/assets/cutscenes/scene1.jpg",
-        text: "text",
-      },
-    ];
-
-    this.hideAllHUDElements(); // ← HIDE ALL HUD
-    this.isPaused = true;
-    await this.cutsceneMgr.play(intro);
-    this.isPaused = false;
-    this.showAllHUDElements(); // ← RESTORE
-  }
-
-  async playVictoryCutscene() {
-    const victory = [
-      {
-        image: "/assets/cutscenes/scene1.jpg",
-        text: "text",
-      },
-      {
-        image: "/assets/cutscenes/scene1.jpg",
-        text: "text",
-      },
-    ];
-
-    this.hideAllHUDElements(); // ← HIDE ALL HUD
-    this.isPaused = true;
-    await this.cutsceneMgr.play(victory);
-    this.isPaused = false;
-    this.showAllHUDElements(); // ← RESTORE
-  }
+      
+  
+      this.hideAllHUDElements(); // ← HIDE ALL HUD
+      this.isPaused = true;
+      await this.cutsceneMgr.play(level2start);
+      this.isPaused = false;
+      this.showAllHUDElements(); // ← RESTORE
+    }
+  
+    async playVictoryCutscene() {
+      
+  
+      this.hideAllHUDElements(); // ← HIDE ALL HUD
+      this.isPaused = true;
+      await this.cutsceneMgr.play(level2postBattle);
+      this.isPaused = false;
+      this.showAllHUDElements(); // ← RESTORE
+    }
 
   // -----------------------------------------------------------------
   // DYNAMIC HUD VISIBILITY (NO HUD.js CHANGES)
@@ -482,7 +468,6 @@ export default class BathroomScene {
 
     console.log("🪞 Mirror mesh found:", mirrorMesh.name);
 
-    // Create render target for mirror reflection
     const renderTargetSize = 512;
     this.mirrorRenderTarget = new THREE.WebGLRenderTarget(
       renderTargetSize,
@@ -491,23 +476,14 @@ export default class BathroomScene {
         minFilter: THREE.LinearFilter,
         magFilter: THREE.LinearFilter,
         format: THREE.RGBAFormat,
-        generateMipmaps: false, // Prevent WebGL warnings
+        generateMipmaps: false,
         type: THREE.UnsignedByteType,
       }
     );
 
-    // Create mirror camera with wider FOV to see more
-    this.mirrorCamera = new THREE.PerspectiveCamera(
-      75, // Wider FOV to see more in reflection
-      1, // Square aspect ratio for mirror
-      0.1,
-      100
-    );
-
-    // Store mirror mesh reference and position
+    this.mirrorCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
     this.mirrorMesh = mirrorMesh;
 
-    // Get mirror's world position and normal
     mirrorMesh.updateMatrixWorld();
     this.mirrorWorldPosition = new THREE.Vector3();
     this.mirrorWorldNormal = new THREE.Vector3(0, 0, 1);
@@ -515,109 +491,21 @@ export default class BathroomScene {
     mirrorMesh.getWorldPosition(this.mirrorWorldPosition);
     this.mirrorWorldNormal.transformDirection(mirrorMesh.matrixWorld);
 
-    // Create mirror material with render target texture
     const mirrorMaterial = new THREE.MeshBasicMaterial({
       map: this.mirrorRenderTarget.texture,
       transparent: true,
       opacity: 0.9,
     });
 
-    // Apply mirror material to the mesh
     mirrorMesh.material = mirrorMaterial;
-
     this.mirror = mirrorMesh;
 
     console.log("✅ Custom mirror with render target created!");
-
-    // Debug helper - add to global scope
-    window.debugMirror = () => {
-      console.log("Mirror position:", this.mirrorWorldPosition);
-      console.log("Mirror normal:", this.mirrorWorldNormal);
-      console.log("Camera position:", this.camera.position);
-      console.log("Mirror camera position:", this.mirrorCamera.position);
-
-      // Try different normal orientations
-      const normals = [
-        { name: "positive Z", vec: new THREE.Vector3(0, 0, 1) },
-        { name: "negative Z", vec: new THREE.Vector3(0, 0, -1) },
-        { name: "positive X", vec: new THREE.Vector3(1, 0, 0) },
-        { name: "negative X", vec: new THREE.Vector3(-1, 0, 0) },
-        { name: "positive Y", vec: new THREE.Vector3(0, 1, 0) },
-        { name: "negative Y", vec: new THREE.Vector3(0, -1, 0) },
-      ];
-
-      console.log("Try these normals by setting window.mirrorNormal:");
-      normals.forEach((n) => {
-        console.log(
-          `window.mirrorNormal = new THREE.Vector3(${n.vec.x}, ${n.vec.y}, ${n.vec.z}); // ${n.name}`
-        );
-      });
-    };
-
-    // Allow runtime normal adjustment
-    window.mirrorNormal = null;
-
-    // Debug function to test mirror camera view
-    window.showMirrorView = () => {
-      // Temporarily switch to mirror camera view to see what it sees
-      const originalCamera = this.camera;
-      this.camera = this.mirrorCamera;
-
-      setTimeout(() => {
-        this.camera = originalCamera;
-        console.log("Switched back to normal camera");
-      }, 3000);
-
-      console.log("Showing mirror camera view for 3 seconds...");
-    };
-
-    // Debug scene contents
-    window.debugSceneObjects = () => {
-      console.log("=== SCENE OBJECTS ===");
-      let meshCount = 0;
-      this.scene.traverse((child) => {
-        if (child.isMesh) {
-          meshCount++;
-          console.log(
-            `Mesh ${meshCount}: ${child.name || "unnamed"}, visible: ${
-              child.visible
-            }, position:`,
-            child.position
-          );
-          if (child.parent) {
-            console.log(
-              `  Parent: ${child.parent.name || "unnamed"}, visible: ${
-                child.parent.visible
-              }`
-            );
-          }
-        }
-      });
-      console.log(`Total meshes: ${meshCount}`);
-      console.log(
-        "Player ghost:",
-        this.player?.ghost?.visible,
-        this.player?.ghost?.position
-      );
-      console.log(
-        "Player gun:",
-        this.player?.gun?.visible,
-        this.player?.gun?.position
-      );
-      console.log(
-        "Bathroom model:",
-        this.bathroomModel?.visible,
-        this.bathroomModel?.position
-      );
-    };
   }
 
   updateMirror() {
     if (!this.mirror || !this.mirrorCamera || !this.mirrorRenderTarget) return;
 
-    // --------------------------------------------------------------
-    // 1. Update mirror plane (same as before)
-    // --------------------------------------------------------------
     this.mirror.updateMatrixWorld();
     this.mirror.getWorldPosition(this.mirrorWorldPosition);
 
@@ -636,9 +524,6 @@ export default class BathroomScene {
       this.mirrorWorldPosition
     );
 
-    // --------------------------------------------------------------
-    // 2. Reflect camera
-    // --------------------------------------------------------------
     const camPos = this.camera.position.clone();
     const dist = mirrorPlane.distanceToPoint(camPos);
     const reflectedPos = camPos
@@ -657,11 +542,8 @@ export default class BathroomScene {
     this.mirrorCamera.far = 100;
     this.mirrorCamera.updateProjectionMatrix();
 
-    // --------------------------------------------------------------
-    // 3. SAVE visibility + temporarily show player objects
-    // --------------------------------------------------------------
     const visibilityStates = new Map();
-    const playerObjects = []; // objects that belong to the player
+    const playerObjects = [];
 
     this.scene.traverse((child) => {
       if (child.visible !== undefined) {
@@ -669,21 +551,17 @@ export default class BathroomScene {
       }
     });
 
-    // ---- hide the mirror itself (prevents infinite recursion) ----
     this.mirror.visible = false;
 
-    // ---- force player ghost & gun into the mirror render ----
     const ghost = this.player?.ghost;
     const gun = this.player?.gun;
 
     if (ghost) {
-      // remember original parent & visibility
       playerObjects.push({
         obj: ghost,
         wasInScene: ghost.parent === this.scene,
         originalVisible: ghost.visible,
       });
-      // make sure it is in the scene for this frame
       if (!ghost.parent) this.scene.add(ghost);
       ghost.visible = true;
     }
@@ -697,26 +575,17 @@ export default class BathroomScene {
       gun.visible = true;
     }
 
-    // --------------------------------------------------------------
-    // 4. Render mirror
-    // --------------------------------------------------------------
     this.renderer.setRenderTarget(this.mirrorRenderTarget);
     this.renderer.clear();
     this.renderer.render(this.scene, this.mirrorCamera);
     this.renderer.setRenderTarget(null);
 
-    // --------------------------------------------------------------
-    // 5. RESTORE everything
-    // --------------------------------------------------------------
-    // restore mirror
     this.mirror.visible = true;
 
-    // restore scene objects
     visibilityStates.forEach((wasVisible, obj) => {
       obj.visible = wasVisible;
     });
 
-    // restore player objects to their original state
     playerObjects.forEach(({ obj, wasInScene, originalVisible }) => {
       obj.visible = originalVisible;
       if (!wasInScene && obj.parent === this.scene) {
@@ -804,34 +673,27 @@ export default class BathroomScene {
   checkProjectileCollisions() {
     if (!this.boss || !this.player || !this.player.ghost) return;
 
-    // Check if any boss projectiles hit the player
     this.boss.projectiles.forEach((projectile, index) => {
       const distance = projectile.position.distanceTo(
         this.player.ghost.position
       );
       if (distance < 1.0) {
-        // Hit detection radius
         console.log(
           `💥 Player hit by bathroom boss projectile! Distance: ${distance.toFixed(
             2
           )}`
         );
 
-        // Remove the projectile
         this.scene.remove(projectile);
         this.boss.projectiles.splice(index, 1);
-
-        // Handle the hit
         this.handleProjectileHit();
       }
     });
   }
 
   showHitMarker() {
-    // Don't show hit marker if game is over
     if (this.gameOver) return;
 
-    // Create hit marker (X in center of screen)
     const marker = document.createElement("div");
     marker.style.position = "fixed";
     marker.style.top = "50%";
@@ -846,7 +708,6 @@ export default class BathroomScene {
     marker.textContent = "X";
     document.body.appendChild(marker);
 
-    // Fade out and remove
     setTimeout(() => {
       marker.style.transition = "opacity 0.3s";
       marker.style.opacity = "0";
@@ -871,13 +732,10 @@ export default class BathroomScene {
     this.gameOver = true;
     console.log("💀 Game Over - Player Defeated in Bathroom");
 
-    // Disable player shooting
     this.player.combatMode = false;
 
-    // Stop boss from shooting and remove all projectiles
     if (this.boss) {
       this.boss.isAlive = false;
-      // Remove all remaining projectiles immediately
       if (this.boss.projectiles) {
         this.boss.projectiles.forEach((proj) => {
           try {
@@ -888,23 +746,19 @@ export default class BathroomScene {
       }
     }
 
-    // Clean up boss health bar immediately
     this.hud.removeBossHealthBar();
     this.bossHealthFill = null;
 
-    // Exit pointer lock
     if (document.pointerLockElement) {
       document.exitPointerLock();
     }
 
-    // Show Game Over screen after a brief delay
     setTimeout(() => {
       this.showGameOverScreen();
     }, 500);
   }
 
   showGameOverScreen() {
-    // Create overlay
     const overlay = document.createElement("div");
     overlay.id = "bathroom-game-over-overlay";
     overlay.style.position = "fixed";
@@ -920,7 +774,6 @@ export default class BathroomScene {
     overlay.style.zIndex = "10000";
     overlay.style.fontFamily = "Arial, sans-serif";
 
-    // Game Over text
     const title = document.createElement("h1");
     title.textContent = "GAME OVER";
     title.style.color = "#ff0000";
@@ -929,7 +782,6 @@ export default class BathroomScene {
     title.style.textShadow = "4px 4px 8px black";
     overlay.appendChild(title);
 
-    // Subtitle
     const subtitle = document.createElement("p");
     subtitle.textContent = "The Bathroom Ghost was too powerful...";
     subtitle.style.color = "white";
@@ -937,12 +789,10 @@ export default class BathroomScene {
     subtitle.style.marginBottom = "40px";
     overlay.appendChild(subtitle);
 
-    // Button container
     const buttonContainer = document.createElement("div");
     buttonContainer.style.display = "flex";
     buttonContainer.style.gap = "20px";
 
-    // Restart button
     const restartBtn = document.createElement("button");
     restartBtn.textContent = "RESTART";
     restartBtn.style.padding = "15px 40px";
@@ -969,7 +819,6 @@ export default class BathroomScene {
       this.restartGame();
     };
 
-    // Main Menu button
     const mainMenuBtn = document.createElement("button");
     mainMenuBtn.textContent = "MAIN MENU";
     mainMenuBtn.style.padding = "15px 40px";
@@ -1103,16 +952,13 @@ export default class BathroomScene {
   goToMainMenu() {
     console.log("Going to main menu...");
 
-    // Remove game over overlay
     const overlay = document.getElementById("bathroom-game-over-overlay");
     if (overlay) {
       document.body.removeChild(overlay);
     }
 
-    // Clean up boss health bar
     this.hud.removeBossHealthBar();
 
-    // Reload the page to go back to main menu
     window.location.reload();
   }
 
@@ -1127,21 +973,19 @@ export default class BathroomScene {
 
       this.toiletPaper = gltf.scene;
       this.toiletPaper.position.copy(position);
-      this.toiletPaper.position.y = 1.0; // Float at pickup height
-      this.toiletPaper.scale.set(0.5, 0.5, 0.5); // Smaller scale
+      this.toiletPaper.position.y = 1.0;
+      this.toiletPaper.scale.set(0.5, 0.5, 0.5);
       this.toiletPaper.userData.isPickup = true;
       this.toiletPaper.userData.itemName = "Toilet Paper";
 
       this.scene.add(this.toiletPaper);
 
-      // Add floating animation
       this.toiletPaper.userData.floatOffset = 0;
 
       console.log("Toilet paper dropped at", position);
     } catch (err) {
       console.error("Failed to load toilet paper model:", err);
 
-      // Fallback: Create simple toilet paper geometry
       this.createFallbackToiletPaper(position);
     }
   }
@@ -1175,7 +1019,6 @@ export default class BathroomScene {
     );
 
     if (distance < 2.0) {
-      // Show pickup prompt
       if (!this.pickupPromptShown) {
         this.showPickupPrompt();
         this.pickupPromptShown = true;
@@ -1219,19 +1062,16 @@ export default class BathroomScene {
 
     console.log("Picking up toilet paper...");
 
-    // Generate icon from 3D model
     const iconUrl = this.generateToiletPaperIcon();
 
-    // Remove toilet paper from scene
     this.scene.remove(this.toiletPaper);
 
-    // Add to inventory
     const toiletPaperItem = {
       name: "Toilet Paper",
       description:
         "Premium toilet paper that will restore the bathroom to its former glory.",
       icon: iconUrl,
-      iconEmoji: "🧻", // Fallback emoji
+      iconEmoji: "🧻",
       onUse: () => this.useToiletPaper(),
     };
 
@@ -1245,7 +1085,6 @@ export default class BathroomScene {
   }
 
   generateToiletPaperIcon() {
-    // Create a small offscreen renderer for the icon
     const iconSize = 128;
     const iconRenderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -1255,26 +1094,21 @@ export default class BathroomScene {
     iconRenderer.setSize(iconSize, iconSize);
     iconRenderer.setClearColor(0x000000, 0);
 
-    // Create camera for icon
     const iconCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
     iconCamera.position.set(2, 2, 2);
     iconCamera.lookAt(0, 0, 0);
 
-    // Create temporary scene with toilet paper
     const iconScene = new THREE.Scene();
 
-    // Add lighting
     const light1 = new THREE.DirectionalLight(0xffffff, 1);
     light1.position.set(1, 1, 1);
     iconScene.add(light1);
     const light2 = new THREE.AmbientLight(0xffffff, 0.5);
     iconScene.add(light2);
 
-    // Clone the toilet paper model
     const toiletPaperClone = this.toiletPaper.clone();
     toiletPaperClone.position.set(0, 0, 0);
 
-    // Scale to fit icon
     const box = new THREE.Box3().setFromObject(toiletPaperClone);
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
@@ -1283,66 +1117,63 @@ export default class BathroomScene {
 
     iconScene.add(toiletPaperClone);
 
-    // Render to canvas
     iconRenderer.render(iconScene, iconCamera);
 
-    // Get data URL
     const iconDataUrl = iconRenderer.domElement.toDataURL("image/png");
 
-    // Cleanup
     iconRenderer.dispose();
 
     return iconDataUrl;
   }
 
-// Key fix for useToiletPaper method - replace lines 1310-1340
+  // -----------------------------------------------------------------
+  // TOILET PAPER USE → KITCHEN TRANSITION
+  // -----------------------------------------------------------------
+  async useToiletPaper() {
+    console.log("Using toilet paper...");
 
-async useToiletPaper() {
-  console.log("Using toilet paper...");
+    this.hud.showMessage("*Rustle rustle* The bathroom is being restored...");
 
-  this.hud.showMessage(
-    "*Rustle rustle* The bathroom is being restored..."
-  );
+    await this.sleep(2000);
 
-  await this.sleep(2000);
+    // TRANSFORM + TRANSITION
+    this.transformBathroom();
 
-  // TRANSFORM + TRANSITION
-  this.transformBathroom();
+    this.hud.showMessage(
+      "The bathroom has been restored! Moving to kitchen..."
+    );
 
-  this.hud.showMessage("The bathroom has been restored! Moving to kitchen...");
+    // Wait for player to see the clean bathroom
+    await this.sleep(2500);
 
-  // Wait for player to see the clean bathroom
-  await this.sleep(2500);
-  
-  // FIXED: Safely remove toilet paper from inventory
-  if (this.inventory && this.inventory.items) {
-    const tpIndex = this.inventory.items.findIndex(item => item.name === "Toilet Paper");
-    if (tpIndex !== -1) {
-      this.inventory.items.splice(tpIndex, 1);
-      console.log("✅ Toilet paper removed from inventory");
-      
-      // Update inventory UI if it exists
-      if (this.inventory.updateUI) {
-        this.inventory.updateUI();
+    // FIXED: Safely remove toilet paper from inventory
+    if (this.inventory && this.inventory.items) {
+      const tpIndex = this.inventory.items.findIndex(
+        (item) => item.name === "Toilet Paper"
+      );
+      if (tpIndex !== -1) {
+        this.inventory.items.splice(tpIndex, 1);
+        console.log("✅ Toilet paper removed from inventory");
+
+        // Update inventory UI if it exists
+        if (this.inventory.updateUI) {
+          this.inventory.updateUI();
+        }
       }
     }
-  }
 
-  // === TRANSITION TO KITCHEN ===
-  window.transitionToKitchen();
-}
+    // === TRANSITION TO KITCHEN ===
+    window.transitionToKitchen();
+  }
 
   transformBathroom() {
     console.log("✨ Transforming bathroom - turning on lights and cleaning!");
 
-    // Apply clean bathroom effects (removes dust, restores white materials)
     this.applyCleanBathroom();
 
-    // Brighten the ambient lighting significantly
     this.ambientLight.intensity = 0.8;
     this.directionalLight.intensity = 1.2;
 
-    // Add warm bathroom lighting
     const warmLight = new THREE.PointLight(0xfff4da, 2, 30);
     warmLight.position.set(0, 8, 8);
     this.scene.add(warmLight);
@@ -1351,7 +1182,6 @@ async useToiletPaper() {
     warmLight2.position.set(5, 6, 5);
     this.scene.add(warmLight2);
 
-    // Change background to a lighter color
     this.scene.background = new THREE.Color(0x2a2a2a);
 
     console.log("💡 Bathroom lights turned on and cleaned!");
@@ -1370,82 +1200,69 @@ async useToiletPaper() {
   }
 
   highlightMesh(name, color = 0xff0000) {
-    if (!this.bathroomModel) {
-      console.warn("Bathroom model not loaded yet.");
-      return;
-    }
-
+    if (!this.bathroomModel) return;
     const mesh = this.bathroomModel.getObjectByName(name);
     if (mesh) {
-      console.log("Highlighting mesh:", name, mesh);
       mesh.material = new THREE.MeshStandardMaterial({
         color,
         emissive: color,
         emissiveIntensity: 0.8,
       });
-    } else {
-      console.warn("Mesh not found:", name);
     }
   }
-  // Add this method to BathroomScene class (before the closing brace)
 
-dispose() {
-  console.log("🧹 Disposing bathroom scene...");
-  
-  // Remove boss if exists
-  if (this.boss) {
-    if (this.boss.bossModel) {
-      this.scene.remove(this.boss.bossModel);
+  // -----------------------------------------------------------------
+  // DISPOSE
+  // -----------------------------------------------------------------
+  dispose() {
+    console.log("🧹 Disposing bathroom scene...");
+
+    if (this.boss) {
+      if (this.boss.bossModel) {
+        this.scene.remove(this.boss.bossModel);
+      }
+      if (this.boss.projectiles) {
+        this.boss.projectiles.forEach((proj) => {
+          if (proj.parent) this.scene.remove(proj);
+        });
+        this.boss.projectiles = [];
+      }
+      this.boss = null;
     }
-    if (this.boss.projectiles) {
-      this.boss.projectiles.forEach(proj => {
-        if (proj.parent) this.scene.remove(proj);
-      });
-      this.boss.projectiles = [];
+
+    if (this.toiletPaper) {
+      this.scene.remove(this.toiletPaper);
+      this.toiletPaper = null;
     }
-    this.boss = null;
+
+    if (this.dustParticles) {
+      this.scene.remove(this.dustParticles);
+      this.dustParticles = null;
+    }
+
+    const torchPrompt = document.getElementById("torch-prompt");
+    if (torchPrompt) torchPrompt.remove();
+
+    const pickupPrompt = document.getElementById("pickup-prompt");
+    if (pickupPrompt) pickupPrompt.remove();
+
+    if (this.hud) {
+      this.hud.removeBossHealthBar();
+    }
+
+    if (this.mirrorRenderTarget) {
+      this.mirrorRenderTarget.dispose();
+      this.mirrorRenderTarget = null;
+    }
+
+    if (this.bathroomModel) {
+      this.scene.remove(this.bathroomModel);
+    }
+
+    if (this.physics) {
+      this.physics.collisionObjects = [];
+    }
+
+    console.log("✅ Bathroom scene disposed");
   }
-  
-  // Remove toilet paper
-  if (this.toiletPaper) {
-    this.scene.remove(this.toiletPaper);
-    this.toiletPaper = null;
-  }
-  
-  // Remove dust particles
-  if (this.dustParticles) {
-    this.scene.remove(this.dustParticles);
-    this.dustParticles = null;
-  }
-  
-  // Clean up UI elements
-  const torchPrompt = document.getElementById("torch-prompt");
-  if (torchPrompt) torchPrompt.remove();
-  
-  const pickupPrompt = document.getElementById("pickup-prompt");
-  if (pickupPrompt) pickupPrompt.remove();
-  
-  // Remove health bar
-  if (this.hud) {
-    this.hud.removeBossHealthBar();
-  }
-  
-  // Clean up mirror
-  if (this.mirrorRenderTarget) {
-    this.mirrorRenderTarget.dispose();
-    this.mirrorRenderTarget = null;
-  }
-  
-  // Remove bathroom model
-  if (this.bathroomModel) {
-    this.scene.remove(this.bathroomModel);
-  }
-  
-  // Clear physics
-  if (this.physics) {
-    this.physics.collisionObjects = [];
-  }
-  
-  console.log("✅ Bathroom scene disposed");
-}
 }

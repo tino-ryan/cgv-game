@@ -7,7 +7,7 @@ import PhysicsSystem from "../systems/physics.js";
 import Inventory from "../systems/inventory.js";
 import KitchenGhost from "../entities/kitchenGhost.js";
 import { level3start } from "../cutscenes/level3start.js";
-import { level3preBattle} from "../cutscenes/level3PreBattle.js";
+import { level3preBattle } from "../cutscenes/level3preBattle.js";
 import { level3postBattle } from "../cutscenes/level3postBattle.js";
 import CutsceneManager from "../systems/cutsceneManager.js";
 
