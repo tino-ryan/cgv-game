@@ -45,11 +45,11 @@ export default class BellboyBoss {
 
   loadProjectileModels() {
     const modelPaths = [
-      "/assets/models/soap.glb",
-      "/assets/models/sponge.glb",
-      "/assets/models/feather_duster.glb",
-      "/assets/models/cc0_-_bucket_3.glb",
-      "/assets/models/low-poly_bleach_bottle.glb",
+      "./assets/models/soap.glb",
+      "./assets/models/sponge.glb",
+      "./assets/models/feather_duster.glb",
+      "./assets/models/cc0_-_bucket_3.glb",
+      "./assets/models/low-poly_bleach_bottle.glb",
     ];
 
     let loadedCount = 0;
@@ -105,7 +105,7 @@ export default class BellboyBoss {
   }
 
   loadBellObject() {
-    const bellPath = "/assets/models/future_10_bell_of_service/scene.gltf";
+    const bellPath = "./assets/models/future_10_bell_of_service/scene.gltf";
 
     this.loader.load(
       bellPath,
@@ -149,7 +149,7 @@ export default class BellboyBoss {
         this.hud ? typeof this.hud.createBossHealthBar : "no hud"
       );
 
-      const gltf = await this.loader.loadAsync("/assets/models/evilghost.glb");
+      const gltf = await this.loader.loadAsync("./assets/models/evilghost.glb");
 
       this.mesh = gltf.scene;
       this.mesh.scale.set(2, 2, 2);

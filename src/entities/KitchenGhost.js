@@ -45,7 +45,7 @@ export default class KitchenGhost {
     this.teleportTimer = 0;
     this.teleportInterval = 7;
     this.teleportRadius = 7;
-    this.teleportHeight = 0.5;
+    this.teleportHeight = 0;
 
     // Visual elements
     this.mesh = null;
@@ -63,7 +63,7 @@ export default class KitchenGhost {
    * Load chef ghost model
    */
   loadBossModel() {
-    const modelPath = "/assets/models/ghostbodychef.glb"; // Use a chef model if you have one
+    const modelPath = "./assets/models/ghostbodychef.glb"; // Use a chef model if you have one
 
     this.gltfLoader.load(
       modelPath,
@@ -426,7 +426,7 @@ export default class KitchenGhost {
     // Lerp position upward
     this.mesh.position.y = THREE.MathUtils.lerp(
       this.ovenPos.y,
-      this.ovenPos.y + 0.5,
+      this.ovenPos.y ,
       progress
     );
     
@@ -435,7 +435,7 @@ export default class KitchenGhost {
 
     if (progress >= 1) {
       this.isSpawning = false;
-      this.mesh.position.y = this.ovenPos.y + 0.5;
+      this.mesh.position.y = this.ovenPos.y ;
       console.log("🔥 Kitchen Ghost spawn complete!");
     }
   }
@@ -544,7 +544,7 @@ export default class KitchenGhost {
     if (!this.isAlive) return;
 
     // Hover animation
-    this.mesh.position.y = (this.ovenPos.y + 0.5) + Math.sin(time * 2) * 0.2;
+    this.mesh.position.y = (this.ovenPos.y ) + Math.sin(time * 2) * 0.2;
 
     // Face player
     if (this.player?.ghost) {

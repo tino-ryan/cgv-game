@@ -30,13 +30,13 @@ constructor(renderer, camera, player, playerPosition, cameraRotation) {
   } else {
     this.hud = new HUD();
     this.player = new Player(this.scene, this.camera, this.hud);
-    this.player.loadGhost("/assets/models/mainchar.glb").then(() => {
+    this.player.loadGhost("./assets/models/mainchar.glb").then(() => {
       if (this.player.ghost) {
         this.player.ghost.scale.set(0.7, 0.7, 0.7);
         this.player.ghost.position.y = 0.8;
       }
     });
-    this.player.loadGun("/assets/models/gun.glb");
+    this.player.loadGun("./assets/models/gun.glb");
   }
 
   this.scene.userData.player = this.player;
@@ -287,7 +287,7 @@ setupLighting() {
     const loader = new GLTFLoader();
     this.showMessage("Loading kitchen...");
     try {
-      const gltf = await loader.loadAsync("/assets/models/kitchen.glb");
+      const gltf = await loader.loadAsync("./assets/models/kitchen.glb");
       const box = new THREE.Box3().setFromObject(gltf.scene);
       const center = box.getCenter(new THREE.Vector3());
       gltf.scene.position.sub(center); // move so model’s center is at (0,0,0)
@@ -433,12 +433,12 @@ const positions = [
 ];
 
     const objectData = [
-      { name: "Frying Pan", model: "/assets/models/frying_pan.glb", targetSize: 1.8, color: 0x333333 },
-      { name: "Blender", model: "/assets/models/blender.glb", targetSize: 1.5, color: 0x888888 },
-      { name: "Toaster", model: "/assets/models/toaster.glb", targetSize: 0.8, color: 0xcccccc },
-      { name: "Knife Block", model: "/assets/models/knife_block.glb", targetSize: 1.7, color: 0x8b4513 },
-      { name: "Pot of Soup", model: "/assets/models/pot.glb", targetSize: 1.8, color: 0x666666 },
-      { name: "Rolling Pin", model: "/assets/models/rolling_pin_asset.glb", targetSize: 1.5, color: 0xf5deb3 }
+      { name: "Frying Pan", model: "./assets/models/frying_pan.glb", targetSize: 1.8, color: 0x333333 },
+      { name: "Blender", model: "./assets/models/blender.glb", targetSize: 1.5, color: 0x888888 },
+      { name: "Toaster", model: "./assets/models/toaster.glb", targetSize: 0.8, color: 0xcccccc },
+      { name: "Knife Block", model: "./assets/models/knife_block.glb", targetSize: 1.7, color: 0x8b4513 },
+      { name: "Pot of Soup", model: "./assets/models/pot.glb", targetSize: 1.8, color: 0x666666 },
+      { name: "Rolling Pin", model: "./assets/models/rolling_pin_asset.glb", targetSize: 1.5, color: 0xf5deb3 }
     ];
 
     // Randomize which objects are possessed

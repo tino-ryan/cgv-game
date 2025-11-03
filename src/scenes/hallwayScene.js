@@ -132,8 +132,8 @@ export default class HallwayScene {
 
     const textureLoader = new THREE.TextureLoader();
     const texturePaths = [
-      "/assets/textures/tiles.jpg",
-      "/assets/textures/tiles.png",
+      "./assets/textures/tiles.jpg",
+      "./assets/textures/tiles.png",
       "./assets/textures/tiles.jpg",
       "./assets/textures/tiles.png",
       "assets/textures/tiles.jpg",
@@ -193,8 +193,8 @@ export default class HallwayScene {
 
     const textureLoader = new THREE.TextureLoader();
     const texturePaths = [
-      "/assets/textures/ceiling.jpg",
-      "/assets/textures/ceiling.png",
+      "./assets/textures/ceiling.jpg",
+      "./assets/textures/ceiling.png",
       "./assets/textures/ceiling.jpg",
       "./assets/textures/ceiling.png",
       "assets/textures/ceiling.jpg",
@@ -377,8 +377,8 @@ export default class HallwayScene {
       });
 
       const windowPaths = [
-        "/assets/textures/window.jpg",
-        "/assets/textures/window.png",
+        "./assets/textures/window.jpg",
+        "./assets/textures/window.png",
         "./assets/textures/window.jpg",
         "./assets/textures/window.png",
         "assets/textures/window.jpg",
@@ -702,8 +702,8 @@ export default class HallwayScene {
 
     const textureLoader = new THREE.TextureLoader();
     const texturePaths = [
-      "/assets/textures/tile_texture.jpg",
-      "/assets/textures/tile_texture.png",
+      "./assets/textures/tile_texture.jpg",
+      "./assets/textures/tile_texture.png",
       "./assets/textures/tile_texture.jpg",
       "./assets/textures/tile_texture.png",
       "assets/textures/tile_texture.jpg",

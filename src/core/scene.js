@@ -336,8 +336,8 @@ export default class HallwayScene {
     // Load texture - try multiple common paths
     const textureLoader = new THREE.TextureLoader();
     const texturePaths = [
-      '/assets/textures/tile_texture.jpg',
-      '/assets/textures/tile_texture.png',
+      './assets/textures/tile_texture.jpg',
+      './assets/textures/tile_texture.png',
       './assets/textures/tile_texture.jpg',
       './assets/textures/tile_texture.png',
       'assets/textures/tile_texture.jpg',

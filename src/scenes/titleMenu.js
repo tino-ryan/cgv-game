@@ -23,7 +23,7 @@ export default class TitleMenu {
 
     // 👻 Logo
     const logo = document.createElement("img");
-    logo.src = "./src/ui/1000095088.png"; // Update path as needed
+    logo.src = "./assets/cutscenes/1000095088.png"; // Update path as needed
     Object.assign(logo.style, {
       width: "400px",
       height: "auto",

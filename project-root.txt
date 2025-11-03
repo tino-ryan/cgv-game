@@ -254,7 +254,7 @@ This file defines the `LobbyScene` class, which represents the starting level (l
 #### Initialization Flow
 1. **Scene Setup**: Creates a new THREE.Scene, adds ambient and directional lights.
 2. **Load Environment**: Calls `loadLobbyEnvironment()` to asynchronously load `/assets/models/lobby.glb` using GLTFLoader. Scales it, adds to scene, and registers with physics for collisions.
-3. **Player Setup**: Creates `Player`, loads ghost model (`/public/assets/models/scene.gltf`) and gun (`/public/assets/models/gun.glb`).
+3. **Player Setup**: Creates `Player`, loads ghost model (`/assets/models/scene.gltf`) and gun (`/assets/models/gun.glb`).
 4. **Tutorial Start**: Initializes and starts the tutorial with initial camera rotation.
 5. **Boss**: Not initialized until `startBossFight()` is called (e.g., by tutorial completion).
 

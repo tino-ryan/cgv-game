@@ -28,7 +28,7 @@ export default class RoomTransformation {
     /*
     const loader = new GLTFLoader();
     try {
-      const gltf = await loader.loadAsync("/assets/models/lobby_clean.glb");
+      const gltf = await loader.loadAsync("./assets/models/lobby_clean.glb");
 
       // Remove old model
       if (oldModel) {

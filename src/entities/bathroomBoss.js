@@ -24,7 +24,7 @@ export default class BathroomBoss {
 
     this.projectiles = [];
     this.shootCooldown = 0;
-    this.shootInterval = 3; // Faster shooting than bellboy
+    this.shootInterval = 1.5; // Faster shooting than bellboy
 
     // Enhanced movement mechanics - random 3D movement
     this.isMoving = true;
@@ -63,7 +63,7 @@ export default class BathroomBoss {
   }
 
   loadBossModel() {
-    const modelPath = "/assets/models/evilgoatee.glb";
+    const modelPath = "./assets/models/evilgoatee.glb";
 
     this.gltfLoader.load(
       modelPath,

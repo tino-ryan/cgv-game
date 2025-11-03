@@ -93,7 +93,7 @@ export default class BathroomScene {
 
     this.camera.position.y = 2.5;
 
-    this.player.loadGhost("/public/assets/models/mainchar.glb").then(() => {
+    this.player.loadGhost("./assets/models/mainchar.glb").then(() => {
       if (this.player.ghost) {
         this.player.ghost.position.set(0, 2.5, 10);
         this.player.ghost.visible = false;
@@ -101,7 +101,7 @@ export default class BathroomScene {
       }
     });
 
-    this.player.loadGun("/public/assets/models/gun.glb").then(() => {
+    this.player.loadGun("./assets/models/gun.glb").then(() => {
       if (this.player.gun) {
         console.log("Gun loaded for bathroom scene");
         this.player.enterCombat();
@@ -361,7 +361,7 @@ export default class BathroomScene {
     const loader = new GLTFLoader();
     try {
       console.log("Loading bathroom model...");
-      const gltf = await loader.loadAsync("/assets/models/smallbathroom.glb");
+      const gltf = await loader.loadAsync("./assets/models/smallbathroom.glb");
       this.bathroomModel = gltf.scene;
       this.bathroomModel.position.set(0, 4.5, 5);
       this.bathroomModel.scale.set(4, 4, 4);
@@ -934,7 +934,7 @@ export default class BathroomScene {
 
     // === 7. RELOAD GUN & SPAWN BOSS ===
     this.player
-      .loadGun("/public/assets/models/gun.glb")
+      .loadGun("./assets/models/gun.glb")
       .then(() => {
         if (this.player.gun) {
           console.log("Gun re-loaded");
@@ -968,7 +968,7 @@ export default class BathroomScene {
     try {
       console.log("Loading toilet paper...");
       const gltf = await loader.loadAsync(
-        "/assets/models/simple_toilet_paper_2.0.glb"
+        "./assets/models/simple_toilet_paper_2.0.glb"
       );
 
       this.toiletPaper = gltf.scene;

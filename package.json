@@ -1,12 +1,12 @@
 {
   "name": "cgv-game",
   "version": "1.0.0",
-  "description": "",
+  "description": "Cozy Ghost Hotel Game",
   "main": "index.js",
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "three": "^0.180.0"
   },
@@ -14,6 +14,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "vite",
     "build": "vite build",
+    "build:lamp": "vite build ",
     "preview": "vite preview"
   },
   "devDependencies": {

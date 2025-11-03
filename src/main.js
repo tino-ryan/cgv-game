@@ -83,8 +83,8 @@ async function init() {
     console.log("TESTING MODE: Loading kitchen scene directly");
     const hud = new HUD();
     const player = new Player(null, camera, hud);
-    await player.loadGhost("/assets/models/mainchar.glb");
-    await player.loadGun("/assets/models/gun.glb");
+    await player.loadGhost("./assets/models/mainchar.glb");
+    await player.loadGun("./assets/models/gun.glb");
 
     kitchenScene = new KitchenScene(
       renderer,
@@ -531,8 +531,8 @@ window.skipToHallway = () => {
   if (!currentScene?.player) {
     const hud = new HUD();
     const player = new Player(null, camera, hud);
-    player.loadGhost("/assets/models/mainchar.glb");
-    player.loadGun("/assets/models/gun.glb");
+    player.loadGhost("./assets/models/mainchar.glb");
+    player.loadGun("./assets/models/gun.glb");
     
     hallwayScene = new HallwayScene(
       renderer,
@@ -580,8 +580,8 @@ window.skipToBathroom = () => {
   if (!currentScene?.player) {
     const hud = new HUD();
     const player = new Player(null, camera, hud);
-    player.loadGhost("/assets/models/mainchar.glb");
-    player.loadGun("/assets/models/gun.glb");
+    player.loadGhost("./assets/models/mainchar.glb");
+    player.loadGun("./assets/models/gun.glb");
     
     bathroomScene = new BathroomScene(
       renderer,
@@ -631,8 +631,8 @@ window.skipToKitchen = () => {
   if (!currentScene?.player) {
     const hud = new HUD();
     const player = new Player(null, camera, hud);
-    player.loadGhost("/assets/models/mainchar.glb");
-    player.loadGun("/assets/models/gun.glb");
+    player.loadGhost("./assets/models/mainchar.glb");
+    player.loadGun("./assets/models/gun.glb");
     
     kitchenScene = new KitchenScene(
       renderer,

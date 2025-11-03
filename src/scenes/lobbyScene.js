@@ -48,8 +48,8 @@ export default class LobbyScene {
 
     this.hud = new HUD();
     this.player = new Player(this.scene, this.camera, this.hud);
-    this.player.loadGhost("/public/assets/models/mainchar.glb");
-    this.player.loadGun("/public/assets/models/gun.glb");
+    this.player.loadGhost("./assets/models/mainchar.glb");
+    this.player.loadGun("./assets/models/gun.glb");
 
     window.lobbyScene = this;
 
@@ -65,10 +65,10 @@ export default class LobbyScene {
 
   async loadTutorialOrbModels() {
     const orbModelPaths = [
-      "/assets/models/cc0_-_bucket_3.glb",
-      "/assets/models/feather_duster.glb",
-      "/assets/models/soap.glb",
-      "/assets/models/sponge.glb",
+      "./assets/models/cc0_-_bucket_3.glb",
+      "./assets/models/feather_duster.glb",
+      "./assets/models/soap.glb",
+      "./assets/models/sponge.glb",
     ];
 
     try {
@@ -84,7 +84,7 @@ export default class LobbyScene {
   async loadLobbyEnvironment() {
     const loader = new GLTFLoader();
     try {
-      const gltf = await loader.loadAsync("/assets/models/lobby.glb");
+      const gltf = await loader.loadAsync("./assets/models/lobby.glb");
       this.lobbyModel = gltf.scene;
       this.lobbyModel.position.set(0, 0, 0);
       this.lobbyModel.scale.set(2.5, 2.5, 2.5);
@@ -569,7 +569,7 @@ export default class LobbyScene {
     const loader = new GLTFLoader();
     try {
       console.log("Loading service bell...");
-      const gltf = await loader.loadAsync("/assets/models/worn_service_ring_bell.glb");
+      const gltf = await loader.loadAsync("./assets/models/worn_service_ring_bell.glb");
       this.serviceBell = gltf.scene;
       this.serviceBell.position.copy(position);
       this.serviceBell.position.y = 1.0;
